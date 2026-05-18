@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    /* Core Build */
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    /* Module System (IMPORTANT) */
+    "module": "commonjs",
+    "target": "ES2020",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "5.0",
+
+    /* Interop */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    /* Strictness */
+    "strict": true,
+
+    /* DX + Stability */
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    /* Debugging */
+    "sourceMap": true,
+
+    /* Clean Output */
+    "removeComments": true,
+    "types": ["node", "jest"]
+  },
+
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
