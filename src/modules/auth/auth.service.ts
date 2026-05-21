@@ -56,6 +56,7 @@ export const registerUser = async (data: {
     id: user._id,
     name: user.name,
     email: user.email,
+    avatar: user.avatar || "",
   };
 };
 
@@ -127,10 +128,12 @@ export const loginUser = async (
     accessToken,
     refreshToken: rawRefreshToken,
     sessionId,
+
     user: {
       id: user._id,
       name: user.name,
       email: user.email,
+      avatar: user.avatar || "",
     },
   };
 };
@@ -317,6 +320,11 @@ export const googleAuthService = async (
     accessToken,
     refreshToken: rawRefreshToken,
     sessionId,
-    user: { id: user._id, name: user.name, email: user.email },
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar || "",
+    },
   };
 };
