@@ -4,6 +4,7 @@ export interface ConversationListUserDto {
   id: string;
   name: string;
   avatar: string;
+  role?:"admin" | "member";
   status?: "online" | "offline" | "away";
   lastSeen?: string | null;
 }

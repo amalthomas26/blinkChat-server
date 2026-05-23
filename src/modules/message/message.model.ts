@@ -7,6 +7,7 @@ export enum MessageType {
   VIDEO = "video",
   FILE = "file",
   CALL = "call",
+  SYSTEM = "system",
 }
 
 export interface IDeliveredTo {

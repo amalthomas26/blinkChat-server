@@ -214,6 +214,7 @@ export interface ServerToClientEvents {
   group_avatar_updated:(payload:{conversationId:string; groupAvatar:string}) => void;
   group_avatar_deleted:(payload:{conversationId:string;}) => void;
   member_promoted:(payload:{conversationId:string;promotedUserId:string}) => void;
+  member_demoted:(payload:{conversationId:string;demoteUserId:string}) => void;
   message_pinned:(payload:{conversationId:string; messageId:string;pinnedBy:string})
   =>void;
   message_unpinned:(payload:{conversationId:string;messageId:string;})

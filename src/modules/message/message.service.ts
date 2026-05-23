@@ -974,4 +974,37 @@ export const createCallLogMessage = async (input: {
     return null;
   }
 };
+/**
+ * Write a system/event message to a conversation and update lastMessage.
+ * System messages have no real sender — we use a zero ObjectId as a sentinel.
+ * Returns the MessageDto so callers can immediately broadcast it via socket.
+ */
+export const createSystemMessage = async (
+  conversationId: string,
+  text: string,
+): Promise<import("./message.types").MessageDto | null> => {
+  if (!isValidObjectId(conversationId)) return null;
 
+  try {
+    // Use the conversation's own ObjectId as a dummy sender
+    const convObjectId = new Types.ObjectId(conversationId);
+
+    const message = await Message.create({
+      conversation: convObjectId,
+      sender: convObjectId, // sentinel — UI checks type === "system" to hide sender
+      content: text,
+      type: MessageType.SYSTEM,
+      deliveredTo: [],
+    });
+
+    await Conversation.updateOne(
+      { _id: convObjectId },
+      { $set: { lastMessage: message._id, updatedAt: message.createdAt } },
+    );
+
+    return toMessageDto(message);
+  } catch (err) {
+    console.error("[createSystemMessage] failed:", err);
+    return null;
+  }
+};

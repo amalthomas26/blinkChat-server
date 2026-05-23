@@ -11,6 +11,7 @@ import {
   updateGroupAvatar,
   deleteGroupAvatar,
   promoteAdmin,
+  demoteAdmin,
   pinMessage,
   unpinMessage,
   getPinnedMessages,
@@ -18,10 +19,15 @@ import {
   unpinConversation,
   muteConversation,
   unmuteConversation,
+  updateGroupDescription,
+  deleteDirectConversation,
 } from "./conversation.service";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { getIO } from "../../socket/socket.server";
 import { presenceStore } from "../../socket/presence.store";
+import { createSystemMessage } from "../message/message.service";
+import { ConversationParticipant } from "./conversationParticipant.model";
+import mongoose from "mongoose";
 
 // startConversationController: validation is already done by validateStartConversation middleware.
 // The service re-validates userId/receiverId at the boundary — no duplication needed here.
@@ -138,6 +144,11 @@ export const addGroupMemberController = asyncHandler(async (req, res) => {
     members: memberDtos,
   });
 
+  // System message: "Alice, Bob were added to the group"
+  const names = memberDtos.map((m) => m.name).join(", ");
+  const sysMsg = await createSystemMessage(conversationId, `${names} ${memberDtos.length === 1 ? "was" : "were"} added to the group`);
+  if (sysMsg) io.to(conversationId).emit("receive_message", sysMsg);
+
   return res.status(200).json({ success: true, data: { added: memberDtos } });
 });
 
@@ -159,6 +170,11 @@ export const removeGroupMemberController = asyncHandler(async (req, res) => {
     conversationId,
     removedUserIds: memberIds,
   });
+
+  // System message visible only to remaining members (removed ones left room above)
+  const removedNames = memberIds.length === 1 ? "A member" : `${memberIds.length} members`;
+  const sysMsg = await createSystemMessage(conversationId, `${removedNames} ${memberIds.length === 1 ? "was" : "were"} removed from the group`);
+  if (sysMsg) io.to(conversationId).emit("receive_message", sysMsg);
 
   return res.status(200).json({ success: true, data: null });
 });
@@ -194,6 +210,15 @@ export const leaveGroupController = asyncHandler(async (req, res) => {
     userId,
     ...(newAdminId ? { newAdminId } : {}),
   });
+
+  // System message visible to remaining members only (leaver left room above)
+  const leftSysMsg = await createSystemMessage(conversationId, "A member left the group");
+  if (leftSysMsg) io.to(conversationId).emit("receive_message", leftSysMsg);
+
+  if (newAdminId) {
+    const adminSysMsg = await createSystemMessage(conversationId, "A new admin has been assigned");
+    if (adminSysMsg) io.to(conversationId).emit("receive_message", adminSysMsg);
+  }
 
   return res.status(200).json({ success: true, data: null });
 });
@@ -240,7 +265,7 @@ export const deleteGroupAvatarController = asyncHandler(
 
 export const promoteToAdminController = asyncHandler(async (req, res) => {
   const { id: conversationId } = req.params;
-  const { userId: targetUserId } = req.body as { userId: string };
+  const targetUserId = req.params.userId;
 
   await promoteAdmin(conversationId, req.user.id, targetUserId);
 
@@ -248,6 +273,25 @@ export const promoteToAdminController = asyncHandler(async (req, res) => {
     conversationId,
     promotedUserId: targetUserId,
   });
+
+  const promoteSysMsg = await createSystemMessage(conversationId, "A member was promoted to admin");
+  if (promoteSysMsg) getIO().to(conversationId).emit("receive_message", promoteSysMsg);
+
+  res.status(200).json({ success: true });
+});
+
+export const demoteAdminController = asyncHandler(async (req, res) => {
+  const { id: conversationId, userId: targetUserId } = req.params;
+
+  await demoteAdmin(conversationId, req.user.id, targetUserId);
+
+  getIO().to(conversationId).emit("member_demoted", {
+    conversationId,
+    demoteUserId: targetUserId,
+  });
+
+  const demoteSysMsg = await createSystemMessage(conversationId, "An admin was demoted to member");
+  if (demoteSysMsg) getIO().to(conversationId).emit("receive_message", demoteSysMsg);
 
   res.status(200).json({ success: true });
 });
@@ -349,4 +393,45 @@ export const unmuteConversationController = asyncHandler(
     return res.status(200).json({ success: true, data: result });
   },
 );
- 
+
+export const updateGroupDescriptionController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
+    const { description } = req.body as { description: string };
+
+    await updateGroupDescription(conversationId, req.user.id, description ?? "");
+
+    return res.status(200).json({ success: true });
+  },
+);
+
+export const deleteDirectConversationController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
+    const userId = req.user.id;
+
+    // Identify the other participant BEFORE deletion
+    const participantRecord = await ConversationParticipant.find({
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+    }).select("userId").lean<{ userId: mongoose.Types.ObjectId }[]>();
+
+    const otherParticipantIds = participantRecord
+      .map((p) => p.userId.toString())
+      .filter((id) => id !== userId);
+
+    await deleteDirectConversation(conversationId, userId);
+
+    // Notify the other participant via socket (if they're online)
+    const io = getIO();
+    for (const otherId of otherParticipantIds) {
+      for (const socketId of presenceStore.getSockets(otherId)) {
+        io.to(socketId).emit("group_members_removed", {
+          conversationId,
+          removedUserIds: [userId],
+        });
+      }
+    }
+
+    return res.status(200).json({ success: true });
+  },
+);

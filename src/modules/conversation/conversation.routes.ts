@@ -12,9 +12,15 @@ import {
   deleteGroupAvatarController,
   pinMessageController,
   unpinMessageController,
+  muteConversationController,
+  unmuteConversationController,
+  promoteToAdminController,
+  demoteAdminController,
   getPinnedMessagesController,
   pinConversationController,
   unpinConversationController,
+  updateGroupDescriptionController,
+  deleteDirectConversationController,
 } from "./conversation.controller";
 import { validateStartConversation } from "./conversation.validation";
 import { protect } from "../../middleware/auth";
@@ -23,22 +29,15 @@ const router = Router();
 
 router.use(protect);
 
-// ----------------------
-//  Conversation-level actions (specific FIRST)
-// ----------------------
 router.post("/:id/pin", pinConversationController);
 router.delete("/:id/pin", unpinConversationController);
+router.patch("/:id/mute", muteConversationController);
++router.delete("/:id/mute", unmuteConversationController);
 
-// ----------------------
-//  Message pinning (more specific than :id)
-// ----------------------
 router.post("/:id/pins/:messageId", pinMessageController);
 router.delete("/:id/pins/:messageId", unpinMessageController);
 router.get("/:id/pins", getPinnedMessagesController);
 
-// ----------------------
-//  Group operations
-// ----------------------
 router.post("/group", createGroupController);
 router.patch("/:id/name", renameGroupController);
 router.patch("/:id/avatar", updateGroupAvatarController);
@@ -47,14 +46,15 @@ router.delete("/:id/avatar", deleteGroupAvatarController);
 router.post("/:id/members", addGroupMemberController);
 router.delete("/:id/members/me", leaveGroupController);
 router.delete("/:id/members", removeGroupMemberController);
+router.patch("/:id/members/:userId/promote", promoteToAdminController);
+router.patch("/:id/members/:userId/demote", demoteAdminController);
 
-// ----------------------
-//  Conversation CRUD
-// ----------------------
 router.get("/", listConversationsController);
 router.post("/", validateStartConversation, startConversationController);
 
 //  ALWAYS KEEP THIS LAST
+router.patch("/:id/description", updateGroupDescriptionController);
+router.delete("/:id", deleteDirectConversationController);
 router.get("/:id", getConversationController);
 
 export default router;

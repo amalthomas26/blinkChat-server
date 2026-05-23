@@ -41,6 +41,7 @@ type PopulatedConversationMessage = {
 
 type PopulatedConversationRecord = {
   _id: Types.ObjectId;
+  participants?: Types.ObjectId[];
   isGroup: boolean;
   groupName?: string;
   groupDescription?: string;
@@ -206,7 +207,23 @@ export const startConversation = async (
     isGroup: false,
   });
 
-  if (conversation) return conversation;
+  if (conversation) {
+    // The Conversation doc exists. But the caller may have previously
+    // deleted their side (which removes their ConversationParticipant row).
+    // Re-create it if missing so downstream membership checks pass.
+    await ConversationParticipant.updateOne(
+      { conversationId: conversation._id, userId: userObj },
+      {
+        $setOnInsert: {
+          conversationId: conversation._id,
+          userId: userObj,
+          lastSeenMessageId: null,
+        },
+      },
+      { upsert: true },
+    );
+    return conversation;
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -521,9 +538,10 @@ export const listConversationsForUser = async (
       ).toString("base64")
     : null;
   const conversationIds = pageRows.map((row) => row.conversationId);
+  const groupConversationIds = pageRows.filter(r => r.conversation.isGroup).map(r => r.conversationId);
 
   const participantMemberships = await ConversationParticipant.find({
-    conversationId: { $in: conversationIds },
+    conversationId: { $in: groupConversationIds },
   })
     .select("conversationId userId")
     .populate<{ userId: PopulatedConversationUser | null }>({
@@ -549,17 +567,40 @@ export const listConversationsForUser = async (
     new Map<string, ConversationListUserDto[]>(),
   );
 
+  const directParticipantIds = new Set<string>();
+  pageRows.forEach((row) => {
+    if (!row.conversation.isGroup && row.conversation.participants) {
+      row.conversation.participants.forEach((pid) => directParticipantIds.add(pid.toString()));
+    }
+  });
+
+  const directUsers = await User.find({ _id: { $in: Array.from(directParticipantIds) } })
+    .select("_id name avatar status lastSeen")
+    .lean<PopulatedConversationUser[]>();
+
+  const directUsersMap = new Map<string, ConversationListUserDto>();
+  directUsers.forEach(u => directUsersMap.set(u._id.toString(), toConversationUserDto(u)));
+
   const conversations = pageRows.map((row) => {
     const conversation = row.conversation;
 
-    const participants =
-      participantsByConversation
-        .get(conversation._id.toString())
-        ?.sort(
-          (left, right) =>
-            left.name.localeCompare(right.name) ||
-            left.id.localeCompare(right.id),
-        ) ?? [];
+    let participants: ConversationListUserDto[] = [];
+    
+    if (conversation.isGroup) {
+      participants =
+        participantsByConversation
+          .get(conversation._id.toString())
+          ?.sort(
+            (left, right) =>
+              left.name.localeCompare(right.name) ||
+              left.id.localeCompare(right.id),
+          ) ?? [];
+    } else {
+      participants = (conversation.participants || [])
+         .map(pid => directUsersMap.get(pid.toString()))
+         .filter((u): u is ConversationListUserDto => u !== undefined)
+         .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+    }
 
     const peer = conversation.isGroup
       ? null
@@ -623,7 +664,7 @@ export const getConversationDetails = async (
 
   const conversation = await Conversation.findById(conversationId)
     .select(
-      "isGroup groupName groupAvatar groupDescription maxParticipants lastMessage updatedAt",
+      "participants isGroup groupName groupAvatar groupDescription maxParticipants lastMessage updatedAt",
     )
     .populate<{ lastMessage: PopulatedConversationMessage | null }>({
       path: "lastMessage",
@@ -634,29 +675,45 @@ export const getConversationDetails = async (
 
   if (!conversation) throw new ApiError(404, "Conversation not found");
 
-  const participantRows = await ConversationParticipant.find({
-    conversationId: conversation._id,
-  })
-    .select("conversationId userId")
-    .populate<{ userId: PopulatedConversationUser | null }>({
-      path: "userId",
-      select: "_id name avatar status lastSeen",
-    })
-    .lean<ParticipantMembershipRecord[]>();
+  let participants: ConversationListUserDto[] = [];
 
-  const participants: ConversationListUserDto[] = participantRows
-    .filter(
-      (
-        row,
-      ): row is ParticipantMembershipRecord & {
-        userId: PopulatedConversationUser;
-      } => row.userId !== null,
-    )
-    .map((row) => toConversationUserDto(row.userId))
-    .sort(
+  if (conversation.isGroup) {
+    const participantRows = await ConversationParticipant.find({
+      conversationId: conversation._id,
+    })
+      .select("conversationId userId role")
+      .populate<{ userId: PopulatedConversationUser | null }>({
+        path: "userId",
+        select: "_id name avatar status lastSeen",
+      })
+      .lean<(ParticipantMembershipRecord & { role?: "admin" | "member" })[]>();
+
+    participants = participantRows
+      .filter(
+        (
+          row,
+        ): row is ParticipantMembershipRecord & {
+          userId: PopulatedConversationUser;
+        } & { role?: "admin" | "member" } => row.userId !== null,
+      )
+      .map((row) => ({
+        ...toConversationUserDto(row.userId),
+        role: row.role,
+      }))
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+      );
+  } else {
+    const users = await User.find({ _id: { $in: conversation.participants || [] } })
+      .select("_id name avatar status lastSeen")
+      .lean<PopulatedConversationUser[]>();
+      
+    participants = users.map(toConversationUserDto).sort(
       (left, right) =>
         left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
     );
+  }
   const peer = conversation.isGroup
     ? null
     : (participants.find((p) => p.id !== userId) ?? null);
@@ -1227,6 +1284,54 @@ export const promoteAdmin = async (
     { $set: { role: "admin" } },
   );
 };
+export const demoteAdmin = async (
+  conversationId: string,
+  requesterId: string,
+  targetUserId: string,
+): Promise<void> => {
+  if (!isValidObjectId(conversationId))
+    throw new ApiError(400, "Invalid conversationId");
+  if (!isValidObjectId(requesterId))
+    throw new ApiError(400, "Invalid requesterId");
+  if (!isValidObjectId(targetUserId))
+    throw new ApiError(400, "Invalid targetUserId");
+
+  if (requesterId === targetUserId)
+    throw new ApiError(400, "You cannot demote yourself");
+
+  const conversationObjectId = new mongoose.Types.ObjectId(conversationId);
+
+  await ensureGroupAdmin(conversationObjectId, requesterId);
+
+  const targetParticipant = await ConversationParticipant.findOne({
+    conversationId: conversationObjectId,
+    userId: new mongoose.Types.ObjectId(targetUserId),
+  });
+
+  if (!targetParticipant)
+    throw new ApiError(404, "User is not a participant in this group");
+
+  if (targetParticipant.role !== "admin")
+    throw new ApiError(400, "User is not an admin");
+
+  const adminCount = await ConversationParticipant.countDocuments({
+    conversationId: conversationObjectId,
+    role: "admin",
+  });
+
+  if (adminCount <= 1)
+    throw new ApiError(400, "Cannot demote the last admin of the group");
+
+  await ConversationParticipant.updateOne(
+    {
+      conversationId: conversationObjectId,
+      userId: new mongoose.Types.ObjectId(targetUserId),
+    },
+    {
+      $set: { role: "member" },
+    },
+  );
+};
 
 export const pinMessage = async (
   conversationId: string,
@@ -1462,3 +1567,71 @@ export const unmuteConversation = async (
 };
 
 //race condition safe because of unique index , upsert and $setOnInsert
+
+export const updateGroupDescription = async (
+  conversationId: string,
+  adminId: string,
+  description: string,
+): Promise<void> => {
+  if (!isValidObjectId(conversationId))
+    throw new ApiError(400, "Invalid conversationId");
+  if (!isValidObjectId(adminId)) throw new ApiError(400, "Invalid adminId");
+
+  const trimmed = description.trim();
+  if (trimmed.length > 300)
+    throw new ApiError(400, "Description cannot exceed 300 characters");
+
+  const conversationObjectId = new mongoose.Types.ObjectId(conversationId);
+  await ensureGroupAdmin(conversationObjectId, adminId);
+
+  const result = await Conversation.updateOne(
+    { _id: conversationObjectId, isGroup: true },
+    { $set: { groupDescription: trimmed } },
+  );
+  if (result.matchedCount === 0)
+    throw new ApiError(404, "Conversation not found or not a group");
+};
+
+/**
+ * Delete a direct (1-to-1) conversation for the requesting user.
+ * - Removes the participant record → conversation disappears from their list.
+ * - If no participants remain, deletes the conversation and its messages.
+ */
+export const deleteDirectConversation = async (
+  conversationId: string,
+  userId: string,
+): Promise<void> => {
+  if (!isValidObjectId(conversationId))
+    throw new ApiError(400, "Invalid conversationId");
+  if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid userId");
+
+  const conversationObjectId = new mongoose.Types.ObjectId(conversationId);
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
+  // Verify membership and that it's a direct conversation
+  const conversation = await Conversation.findById(conversationObjectId)
+    .select("isGroup")
+    .lean<{ isGroup: boolean }>();
+
+  if (!conversation) throw new ApiError(404, "Conversation not found");
+  if (conversation.isGroup)
+    throw new ApiError(400, "Use leave group for group conversations");
+
+  await ensureConversationMembershipForUser(conversationObjectId, userId);
+
+  // Remove the participant record for this user
+  await ConversationParticipant.deleteOne({
+    conversationId: conversationObjectId,
+    userId: userObjectId,
+  });
+
+  // If no participants remain, purge the conversation and messages
+  const remaining = await ConversationParticipant.countDocuments({
+    conversationId: conversationObjectId,
+  });
+
+  if (remaining === 0) {
+    await Message.deleteMany({ conversation: conversationObjectId });
+    await Conversation.deleteOne({ _id: conversationObjectId });
+  }
+};

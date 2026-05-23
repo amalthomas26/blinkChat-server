@@ -26,7 +26,7 @@ export const emitMessage = async (
   try {
     const conversation = await Conversation.findById(conversationId)
       .select("participants")
-      .lean<{ participants: unknown[] }>();
+      .lean<{ participants: { toString(): string }[] }>();
 
     if (conversation?.participants) {
       for (const participantId of conversation.participants) {
