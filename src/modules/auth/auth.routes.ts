@@ -7,8 +7,13 @@ import {
   refreshLimiter,
 } from "../../middleware/rateLimiter";
 import { googleAuth } from "./auth.controller";
+import otpRoutes from "../otp/otp.routes";
 
 const router = Router();
+
+
+// OTP sub-routes: /api/auth/otp/send, /api/auth/otp/verify
+router.use("/otp", otpRoutes)
 
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);

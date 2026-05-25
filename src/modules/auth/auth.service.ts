@@ -20,12 +20,18 @@ export const registerUser = async (data: {
   name: string;
   email: string;
   password: string;
+  username?: string;
+  verifiedToken: string
 }) => {
-  const { name, email, password } = data;
+  const { name, email, password, username, verifiedToken } = data;
 
   if (!name) throw new ApiError(400, "Name is required");
   if (!email) throw new ApiError(400, "Email is required");
   if (!password) throw new ApiError(400, "Password is required");
+  if (!verifiedToken) throw new ApiError(400, "Email verification is required");
+
+
+
 
   if (!validatePassword(password)) {
     throw new ApiError(
@@ -45,11 +51,30 @@ export const registerUser = async (data: {
     throw new ApiError(400, "User already exists");
   }
 
+  if (username) {
+    const trimmedUsername = username.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,30}$/.test(trimmedUsername)) {
+      throw new ApiError(
+        400,
+        "Username must be 3-30 characters: lowercase letters, numbers, underscores only",
+      );
+    }
+    const usernameExists = await User.findOne({ username: trimmedUsername });
+    if (usernameExists) {
+      throw new ApiError(409, "Username is already taken");
+    }
+  }
+
+
+
+
   const user = await User.create({
     name,
     email: normalizedEmail,
     password,
+    username: username?.trim().toLowerCase() || undefined,
     provider: "local",
+    isEmailVerified: true,
   });
 
   return {
@@ -281,6 +306,7 @@ export const googleAuthService = async (
       provider: "google",
       googleId: payload.sub,
       avatar: payload.picture || "",
+      isEmailVerified: true,
     });
   }
 

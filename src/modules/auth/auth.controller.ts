@@ -18,6 +18,8 @@ type RegisterInput = {
   name: string;
   email: string;
   password: string;
+  username?: string;
+  verifiedToken: string;
 };
 
 type LoginInput = {

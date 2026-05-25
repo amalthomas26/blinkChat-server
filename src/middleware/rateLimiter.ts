@@ -49,12 +49,67 @@ export const refreshLimiter = rateLimit({
 });
 
 export const searchLimiter = rateLimit({
-  windowMs:60 * 1000,
-  max:30,
-  standardHeaders:true,
-  legacyHeaders:false,
-  handler:rateLimitHandler,
-  keyGenerator:(req:Request):string =>{
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+  keyGenerator: (req: Request): string => {
+    return ipKeyGenerator(req.ip || "unknown_ip");
+  },
+});
+
+export const otpSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+  keyGenerator: (req: Request): string => {
+    const email =
+      typeof req.body?.email === "string" && req.body.email.trim() !== ""
+        ? req.body.email.toLowerCase()
+        : "anonymous";
+    const ip = ipKeyGenerator(req.ip || "unknown_ip");
+    return `otp_send_${ip}_${email}`;
+  },
+})
+
+
+export const otpVerifyLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+  keyGenerator: (req: Request): string => {
+    return ipKeyGenerator(req.ip || "unknown_ip");
+  },
+});
+
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+  keyGenerator: (req: Request): string => {
+    const email =
+      typeof req.body?.email === "string" && req.body.email.trim() !== ""
+        ? req.body.email.toLowerCase()
+        : "anonymous";
+    const ip = ipKeyGenerator(req.ip || "unknown_ip");
+    return `forgot_${ip}_${email}`;
+  },
+});
+
+export const resetPasswordLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+  keyGenerator: (req: Request): string => {
     return ipKeyGenerator(req.ip || "unknown_ip");
   },
 });

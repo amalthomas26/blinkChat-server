@@ -6,11 +6,14 @@ export interface IUserDocument extends Document {
   name: string;
   email: string;
   password?: string;
+  username?: string;
   provider: AuthProvider;
   googleId?: string;
   avatar?: string;
   avatarPublicId?: string | null;
   bio?: string;
+  isEmailVerified: boolean;
+  passwordChangedAt?: Date;
   status?: "online" | "offline" | "away";
   lastSeen?: Date;
   createdAt: Date;
@@ -49,6 +52,24 @@ const userSchema = new Schema<IUserDocument>(
       type: String,
       unique: true,
       sparse: true,
+    },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      lowercase: true,
+      match: [/^[a-z0-9_]{3,30}$/, "Username must be 3-30 characters: lowercase letters, numbers, underscores only"],
+      index: true,
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: true,
+      index: true
+    },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
     },
     avatar: {
       type: String,
