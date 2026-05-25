@@ -10,6 +10,7 @@ import {
 import { User } from "../user/user.model";
 import RefreshToken from "./refreshToken.model";
 import { OAuth2Client } from "google-auth-library";
+import { sendOtp, validateVerifiedToken } from "../otp/otp.service";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -353,4 +354,73 @@ export const googleAuthService = async (
       avatar: user.avatar || "",
     },
   };
+};
+
+export const forgotPassword = async (email: string): Promise<void> => {
+
+  if (!email) throw new ApiError(400, "Email is required");
+
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    "provider",
+  );
+
+  if (!user) {
+    return;
+  }
+
+  if (user.provider !== "local") {
+    return;
+  }
+
+  await sendOtp(normalizedEmail, "forgot_password");
+
+};
+
+
+export const resetPassword = async (data: {
+  email: string;
+  newPassword: string;
+  verifiedToken: string;
+}): Promise<void> => {
+  const { email, newPassword, verifiedToken } = data;
+
+  if (!email) throw new ApiError(400, "Email is required");
+  if (!newPassword) throw new ApiError(400, "New password is required");
+  if (!verifiedToken)
+    throw new ApiError(400, "Verification token is required");
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  validateVerifiedToken(verifiedToken, "forgot_password", normalizedEmail);
+
+  if (!validatePassword(newPassword))
+    throw new ApiError(
+      400,
+      "Password must be atleast 8 characters, include one uppercase, number, symbol",
+    );
+
+
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    "+password provider",
+  );
+
+
+  if (!user) throw new ApiError(404, "User not found");
+
+  if (user.provider !== "local")
+    throw new ApiError(400, "Use Google login")
+
+
+  user.password = newPassword;
+
+
+  user.passwordChangedAt = new Date();
+
+
+  await user.save();
+
+  await logoutAllSessions(user._id.toString());
 };

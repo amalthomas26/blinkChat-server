@@ -1,12 +1,19 @@
 import { Router } from "express";
-import { register, login, refresh, logout, logoutAll } from "./auth.controller";
+import {
+  register, login, refresh, logout, logoutAll,
+  googleAuth,
+  forgotPasswordController,
+  resetPasswordController
+} from "./auth.controller";
 import { protect } from "../../middleware/auth";
 import {
   loginLimiter,
   registerLimiter,
   refreshLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
 } from "../../middleware/rateLimiter";
-import { googleAuth } from "./auth.controller";
+
 import otpRoutes from "../otp/otp.routes";
 
 const router = Router();
@@ -22,5 +29,9 @@ router.post("/refresh", refreshLimiter, refresh);
 
 router.post("/logout", logout);
 router.post("/logout-all", protect, logoutAll);
+
+
+router.post("/forgot-password", forgotPasswordLimiter, forgotPasswordController);
+router.post("/reset-password", resetPasswordLimiter, resetPasswordController);
 
 export default router;

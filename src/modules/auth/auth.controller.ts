@@ -6,6 +6,8 @@ import {
   refreshTokenService,
   logoutUser,
   logoutAllSessions,
+  forgotPassword,
+  resetPassword,
 } from "./auth.service";
 import {
   clearRefreshTokenCookieOptions,
@@ -131,3 +133,31 @@ export const googleAuth = asyncHandler(async (req: Request, res: Response) => {
     },
   });
 });
+
+export const forgotPasswordController = asyncHandler(
+  async (req: Request, res: Response) => {
+
+    const { email } = req.body;
+
+    await forgotPassword(email);
+
+    return res.status(200).json({
+      success: true,
+      message: "If an account with that email exists, a verification code has been sent."
+    });
+
+
+  },
+);
+
+
+export const resetPasswordController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email, newPassword, verifiedToken } = req.body;
+    await resetPassword({ email, newPassword, verifiedToken });
+    return res.status(200).json({
+      success: true,
+      message: "Password has been reset successfully. Please log in.",
+    });
+  },
+);
