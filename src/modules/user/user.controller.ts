@@ -11,6 +11,7 @@ import {
   unblockUser,
   getBlockedUsers,
   deleteAccount,
+  toggle2FA,
 } from "./user.service";
 import { ApiError } from "../../utils/ApiError";
 import { getIO } from "../../socket/socket.server";
@@ -136,6 +137,106 @@ export const deleteAccountController = asyncHandler(
     res.status(200).json({
       success: true,
       message: "Account deleted successfully",
+    });
+  },
+);
+
+//Toggle 2FA
+export const toggle2FAController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user.id;
+    const { enable, password } = req.body;
+
+    if (typeof enable !== "boolean") {
+      throw new ApiError(400, "'enable' must be a boolean");
+    }
+
+    const result = await toggle2FA(userId, enable, password);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+
+//Update notification preferences
+export const updateNotificationPrefsController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user.id;
+    const { browserNotifications, sounds, muteAll } = req.body;
+
+    // Build update object — only include fields that were sent
+    const update: Record<string, boolean> = {};
+
+    if (typeof browserNotifications === "boolean") {
+      update["notificationPrefs.browserNotifications"] = browserNotifications;
+    }
+    if (typeof sounds === "boolean") {
+      update["notificationPrefs.sounds"] = sounds;
+    }
+    if (typeof muteAll === "boolean") {
+      update["notificationPrefs.muteAll"] = muteAll;
+    }
+
+    if (Object.keys(update).length === 0) {
+      throw new ApiError(400, "No valid preferences provided");
+    }
+
+    const { User } = await import("./user.model");
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: update },
+      { new: true, select: "notificationPrefs" },
+    );
+
+    if (!user) throw new ApiError(404, "User not found");
+
+    res.status(200).json({
+      success: true,
+      data: {
+        browserNotifications: user.notificationPrefs?.browserNotifications ?? true,
+        sounds: user.notificationPrefs?.sounds ?? true,
+        muteAll: user.notificationPrefs?.muteAll ?? false,
+      },
+    });
+  },
+);
+
+//Update privacy preferences
+export const updatePrivacyPrefsController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user.id;
+    const { showOnlineStatus, showLastSeen } = req.body;
+
+    const update: Record<string, boolean> = {};
+
+    if (typeof showOnlineStatus === "boolean") {
+      update["privacyPrefs.showOnlineStatus"] = showOnlineStatus;
+    }
+    if (typeof showLastSeen === "boolean") {
+      update["privacyPrefs.showLastSeen"] = showLastSeen;
+    }
+
+    if (Object.keys(update).length === 0) {
+      throw new ApiError(400, "No valid preferences provided");
+    }
+
+    const { User } = await import("./user.model");
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: update },
+      { new: true, select: "privacyPrefs" },
+    );
+
+    if (!user) throw new ApiError(404, "User not found");
+
+    res.status(200).json({
+      success: true,
+      data: {
+        showOnlineStatus: user.privacyPrefs?.showOnlineStatus ?? true,
+        showLastSeen: user.privacyPrefs?.showLastSeen ?? true,
+      },
     });
   },
 );

@@ -10,7 +10,8 @@ import {
 import { User } from "../user/user.model";
 import RefreshToken from "./refreshToken.model";
 import { OAuth2Client } from "google-auth-library";
-import { sendOtp, validateVerifiedToken } from "../otp/otp.service";
+import { sendOtp, verifyOtp, validateVerifiedToken } from "../otp/otp.service";
+import { LoginResult, SessionDto } from "./auth.types";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -98,7 +99,7 @@ export const loginUser = async (
     ip?: string;
     userAgent?: string;
   },
-) => {
+): Promise<LoginResult> => {
   const { email, password } = data;
 
   if (!email) throw new ApiError(400, "Email is required");
@@ -107,7 +108,7 @@ export const loginUser = async (
   const normalizedEmail = email.trim().toLowerCase();
 
   const user = await User.findOne({ email: normalizedEmail }).select(
-    "+password",
+    "+password twoFactorEnabled",
   );
 
   if (!user) throw new ApiError(400, "Invalid credentials");
@@ -119,6 +120,21 @@ export const loginUser = async (
   const isMatch = await user.comparePassword(password);
   if (!isMatch) throw new ApiError(401, "Invalid credentials");
 
+  // 2FA check 
+  // Password is valid. If 2FA is enabled, send OTP instead of
+  // issuing tokens. The user must complete the second step via
+  // POST /auth/verify-2fa.
+  if (user.twoFactorEnabled) {
+    await sendOtp(normalizedEmail, "login_2fa");
+
+    return {
+      requires2FA: true,
+      email: normalizedEmail,
+    };
+  }
+  //
+
+  // No 2FA issue tokens immediately (existing flow)
   const accessToken = generateAccessToken({
     userId: user._id.toString(),
   });
@@ -153,10 +169,10 @@ export const loginUser = async (
   });
 
   return {
+    requires2FA: false,
     accessToken,
     refreshToken: rawRefreshToken,
     sessionId,
-
     user: {
       id: user._id,
       name: user.name,
@@ -166,6 +182,71 @@ export const loginUser = async (
     },
   };
 };
+
+export const verifyLogin2FA = async (
+  data: {
+    email: string;
+    otp: string;
+  },
+  meta: {
+    device?: string;
+    ip?: string;
+    userAgent?: string;
+  },
+) => {
+  const { email, otp } = data;
+  if (!email) throw new ApiError(400, "Email is required");
+  if (!otp) throw new ApiError(400, "OTP code is required");
+  const normalizedEmail = email.trim().toLowerCase();
+  // Verify the OTP — this throws if invalid/expired/too many attempts
+  await verifyOtp(normalizedEmail, otp, "login_2fa");
+  // OTP is valid — now find the user and issue tokens
+  const user = await User.findOne({ email: normalizedEmail });
+  if (!user) throw new ApiError(404, "User not found");
+  // Edge case: if 2FA was disabled between the login attempt and OTP
+  // verification, we still honor the flow and issue tokens.
+  const accessToken = generateAccessToken({
+    userId: user._id.toString(),
+  });
+  const sessionId = crypto.randomUUID();
+  const rawRefreshToken = generateRefreshToken();
+  const hashed = hashToken(rawRefreshToken);
+  // Enforce max sessions
+  const activeSessions = await RefreshToken.countDocuments({
+    userId: user._id,
+    isRevoked: false,
+  });
+  if (activeSessions >= MAX_SESSIONS) {
+    await RefreshToken.findOneAndUpdate(
+      { userId: user._id, isRevoked: false },
+      { isRevoked: true },
+      { sort: { createdAt: 1 } },
+    );
+  }
+  await RefreshToken.create({
+    userId: user._id,
+    sessionId,
+    token: hashed,
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_DAYS * 86400000),
+    lastUsedAt: new Date(),
+    device: meta.device || "unknown",
+    ip: meta.ip || "unknown",
+    userAgent: meta.userAgent || "unknown",
+  });
+  return {
+    accessToken,
+    refreshToken: rawRefreshToken,
+    sessionId,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar || "",
+      isEmailVerified: user.isEmailVerified,
+    },
+  };
+};
+
 
 export const refreshTokenService = async (token: string) => {
   if (!token) {
@@ -427,4 +508,132 @@ export const resetPassword = async (data: {
   await user.save();
 
   await logoutAllSessions(user._id.toString());
+};
+
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> => {
+
+  if (!userId) throw new ApiError(400, "User ID is required");
+  if (!currentPassword) throw new ApiError(400, "Current password is required");
+  if (!newPassword) throw new ApiError(400, "New password is required");
+
+  if (currentPassword === newPassword) {
+    throw new ApiError(400, "New Password must be different from current password"
+    );
+  }
+
+  if (!validatePassword(newPassword)) {
+    throw new ApiError(
+      400,
+      "Password must be at least 8 characters, include one uppercase, number, symbol",
+    );
+  }
+
+
+  const user = await User.findById(userId).select("+password provider")
+
+  if (!user) throw new ApiError(404, "User not found");
+
+
+  if (user.provider !== "local")
+    throw new ApiError(400, "Cannot change password for Google login accounts");
+
+
+  const isMatch = await user.comparePassword(currentPassword);
+
+
+  if (!isMatch)
+    throw new ApiError(401, "Current password is incorrect");
+
+
+  user.password = newPassword;
+  user.passwordChangedAt = new Date();
+  await user.save();
+
+  await logoutAllSessions(userId);
+}
+
+
+export const getSessions= async (
+  userId: string,
+  currentSessionToken?: string,
+): Promise<SessionDto[]> => {
+
+  // Find the current session's sessionId so we can mark it
+  let currentSessionId: string | null = null;
+  if (currentSessionToken) {
+    const hashed = hashToken(currentSessionToken);
+    const currentDoc = await RefreshToken.findOne({
+      token: hashed,
+      userId,
+    }).select("sessionId");
+    currentSessionId = currentDoc?.sessionId ?? null;
+  }
+  // Aggregate: group by sessionId, take the latest document per group
+  const sessions = await RefreshToken.aggregate([
+    {
+      $match: {
+        userId: new (await import("mongoose")).Types.ObjectId(userId),
+        isRevoked: false,
+        expiresAt: { $gt: new Date() },
+      },
+    },
+    { $sort: { lastUsedAt: -1 } },
+    {
+      $group: {
+        _id: "$sessionId",
+        sessionId: { $first: "$sessionId" },
+        device: { $first: "$device" },
+        ip: { $first: "$ip" },
+        userAgent: { $first: "$userAgent" },
+        lastUsedAt: { $first: "$lastUsedAt" },
+        createdAt: { $first: "$createdAt" },
+      },
+    },
+    { $sort: { lastUsedAt: -1 } },
+  ]);
+  return sessions.map((s) => ({
+    sessionId: s.sessionId,
+    device: s.device || "Unknown",
+    ip: s.ip || "Unknown",
+    userAgent: s.userAgent || "Unknown",
+    lastUsedAt: s.lastUsedAt,
+    createdAt: s.createdAt,
+    isCurrent: s.sessionId === currentSessionId,
+  }));
+
+}
+
+export const revokeSession = async (
+  userId: string,
+  targetSessionId: string,
+  currentSessionToken?: string,
+): Promise<void> => {
+  if (!targetSessionId) throw new ApiError(400, "Session ID is required");
+  // Check if trying to revoke current session
+  if (currentSessionToken) {
+    const hashed = hashToken(currentSessionToken);
+    const currentDoc = await RefreshToken.findOne({
+      token: hashed,
+      userId,
+    }).select("sessionId");
+    if (currentDoc?.sessionId === targetSessionId) {
+      throw new ApiError(400, "Cannot revoke your current session. Use logout instead.");
+    }
+  }
+  // Verify the session belongs to this user
+  const session = await RefreshToken.findOne({
+    sessionId: targetSessionId,
+    userId,
+    isRevoked: false,
+  });
+  if (!session) throw new ApiError(404, "Session not found");
+  // Revoke all tokens with this sessionId
+  await RefreshToken.updateMany(
+    { sessionId: targetSessionId, userId },
+    { isRevoked: true },
+  );
 };

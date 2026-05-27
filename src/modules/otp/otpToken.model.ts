@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export const OTP_PURPOSES = [
     "email_verification",
     "forgot_password",
+    "login_2fa"
 ] as const;
 
 export type OtpPurpose = (typeof OTP_PURPOSES)[number];

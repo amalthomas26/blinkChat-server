@@ -113,3 +113,9 @@ export const resetPasswordLimiter = rateLimit({
     return ipKeyGenerator(req.ip || "unknown_ip");
   },
 });
+
+export const twoFALimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { success: false, message: "Too many 2FA attempts. Try again later." },
+});

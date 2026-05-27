@@ -86,7 +86,7 @@ export const getMe = async (userId: string): Promise<UserProfileDto> => {
     throw new ApiError(400, "Invalid user id");
   }
   const user = await User.findById(userId).select(
-    "name email username avatar bio status lastSeen provider isEmailVerified createdAt",
+    "name email username avatar bio status lastSeen provider isEmailVerified twoFactorEnabled notificationPrefs privacyPrefs createdAt",
   );
 
   if (!user) throw new ApiError(404, "User not found");
@@ -103,6 +103,18 @@ export const getMe = async (userId: string): Promise<UserProfileDto> => {
     lastSeen: user.lastSeen ?? null,
     provider: user.provider,
     isEmailVerified: user.isEmailVerified,
+    twoFactorEnabled: user.twoFactorEnabled ?? false,
+
+    notificationPrefs: {
+      browserNotifications: user.notificationPrefs?.browserNotifications ?? true,
+      sounds: user.notificationPrefs?.sounds ?? true,
+      muteAll: user.notificationPrefs?.muteAll ?? false,
+    },
+
+    privacyPrefs: {
+      showOnlineStatus: user.privacyPrefs?.showOnlineStatus ?? true,
+      showLastSeen: user.privacyPrefs?.showLastSeen ?? true,
+    },
     createdAt: user.createdAt,
   };
 };
@@ -168,7 +180,7 @@ export const searchUsers = async (
 };
 
 const USER_PROFILE_SELECT =
-  "name email username avatar avatarPublicId bio status lastSeen provider isEmailVerified createdAt";
+  "name email username avatar avatarPublicId bio status lastSeen provider isEmailVerified twoFactorEnabled notificationPrefs privacyPrefs createdAt";
 
 //Helper: map mongoose document → plain DTO
 // Keeps controller layer clean — it never touches raw mongoose documents
@@ -182,9 +194,20 @@ function toUserProfileDto(user: UserProfileSource): UserProfileDto {
     avatar: user.avatar ?? null,
     bio: user.bio ?? null,
     status: user.status ?? "offline",
-    lastSeen: user.lastSeen,
+    lastSeen: user.lastSeen ?? null,
     provider: user.provider,
     isEmailVerified: user.isEmailVerified,
+    twoFactorEnabled: user.twoFactorEnabled ?? false,
+    notificationPrefs: {
+      browserNotifications: user.notificationPrefs?.browserNotifications ?? true,
+      sounds: user.notificationPrefs?.sounds ?? true,
+      muteAll: user.notificationPrefs?.muteAll ?? false,
+    },
+    privacyPrefs: {
+      showOnlineStatus: user.privacyPrefs?.showOnlineStatus ?? true,
+      showLastSeen: user.privacyPrefs?.showLastSeen ?? true,
+    },
+
     createdAt: user.createdAt,
   };
 }
@@ -553,4 +576,27 @@ export const deleteAccount = async (userId: string): Promise<void> => {
   } finally {
     session.endSession();
   }
+};
+
+export const toggle2FA = async (
+  userId: string,
+  enable: boolean,
+  password: string,
+): Promise<{ twoFactorEnabled: boolean }> => {
+  if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid user ID");
+  if (!password) throw new ApiError(400, "Password is required to change 2FA settings");
+  const user = await User.findById(userId).select("+password provider twoFactorEnabled");
+  if (!user) throw new ApiError(404, "User not found");
+  if (user.provider !== "local") {
+    throw new ApiError(400, "2FA is not available for Google login accounts");
+  }
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) throw new ApiError(401, "Incorrect password");
+  // Avoid unnecessary DB write if already in the desired state
+  if (user.twoFactorEnabled === enable) {
+    return { twoFactorEnabled: enable };
+  }
+  user.twoFactorEnabled = enable;
+  await user.save();
+  return { twoFactorEnabled: enable };
 };

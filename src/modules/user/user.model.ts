@@ -16,6 +16,20 @@ export interface IUserDocument extends Document {
   passwordChangedAt?: Date;
   status?: "online" | "offline" | "away";
   lastSeen?: Date;
+  twoFactorEnabled: boolean;
+
+  notificationPrefs: {
+    browserNotifications: boolean;
+    sounds: boolean;
+    muteAll: boolean;
+  };
+
+  privacyPrefs: {
+    showOnlineStatus: boolean;
+    showLastSeen: boolean;
+  }
+
+
   createdAt: Date;
   updatedAt: Date;
 
