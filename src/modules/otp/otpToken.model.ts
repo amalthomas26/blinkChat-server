@@ -55,4 +55,8 @@ const otpTokenSchema = new Schema<IOtpToken>(
 
 otpTokenSchema.index({ email: 1, purpose: 1 });
 
+// TTL index: MongoDB auto-deletes OTP documents when expiresAt is reached.
+// { expireAfterSeconds: 0 } = delete at exactly the expiresAt timestamp.
+otpTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 export default mongoose.model<IOtpToken>("OtpToken", otpTokenSchema);

@@ -124,20 +124,20 @@ export const toMessageDto = (message: MessageRecord): MessageDto => ({
 
   replyToSnapshot: message.replyToSnapshot?.senderId
     ? {
-        senderId: message.replyToSnapshot.senderId.toString(),
-        type: message.replyToSnapshot.type,
-        content: message.replyToSnapshot.content,
-        mediaUrl: message.replyToSnapshot.mediaUrl,
-      }
+      senderId: message.replyToSnapshot.senderId.toString(),
+      type: message.replyToSnapshot.type,
+      content: message.replyToSnapshot.content,
+      mediaUrl: message.replyToSnapshot.mediaUrl,
+    }
     : undefined,
   forwardedFrom: message.forwardedFrom?.originalSenderId
     ? {
-        originalSenderId: message.forwardedFrom.originalSenderId.toString(),
-        originalSenderName: message.forwardedFrom.originalSenderName,
-        originalMessageId: message.forwardedFrom.originalMessageId.toString(),
-        originalConversationId:
-          message.forwardedFrom.originalConversationId.toString(),
-      }
+      originalSenderId: message.forwardedFrom.originalSenderId.toString(),
+      originalSenderName: message.forwardedFrom.originalSenderName,
+      originalMessageId: message.forwardedFrom.originalMessageId.toString(),
+      originalConversationId:
+        message.forwardedFrom.originalConversationId.toString(),
+    }
     : undefined,
 });
 
@@ -292,15 +292,31 @@ const persistMessageRecord = async (
         );
     }
   }
+
+
+  const sender = await User.findById(senderId)
+    .select("isEmailVerified")
+    .lean<{ isEmailVerified?: boolean }>();
+
+
+  if (!sender?.isEmailVerified) {
+    throw new ApiError(
+      403,
+      "Please verify your email before sending messages."
+    )
+  }
+
+
+
   let replyToObjectId: Types.ObjectId | undefined;
 
   let replyToSnapshot:
     | {
-        senderId: Types.ObjectId;
-        type: MessageType;
-        content?: string;
-        mediaUrl?: string;
-      }
+      senderId: Types.ObjectId;
+      type: MessageType;
+      content?: string;
+      mediaUrl?: string;
+    }
     | undefined;
 
   if (replyTo) {

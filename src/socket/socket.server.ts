@@ -27,7 +27,7 @@ export const initSocket = (server: HTTPServer) => {
     const userId = socket.data.userId;
 
     if (!userId) {
-      console.warn("[socket] missing userid,disonnecting");
+      console.warn("[socket] missing userid, disconnecting");
       socket.disconnect();
       return;
     }

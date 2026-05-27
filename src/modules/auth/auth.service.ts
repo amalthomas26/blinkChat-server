@@ -31,17 +31,18 @@ export const registerUser = async (data: {
   if (!password) throw new ApiError(400, "Password is required");
   if (!verifiedToken) throw new ApiError(400, "Email verification is required");
 
+  const normalizedEmail = email.trim().toLowerCase();
 
-
+  // Validate the OTP proof token — checks JWT signature, purpose, and email match.
+  // Without this, any truthy string would bypass the OTP gate entirely.
+  validateVerifiedToken(verifiedToken, "email_verification", normalizedEmail);
 
   if (!validatePassword(password)) {
     throw new ApiError(
       400,
-      "Password must be atleast 8 characters, include one uppercase, number, symbol",
+      "Password must be at least 8 characters, include one uppercase, number, symbol",
     );
   }
-
-  const normalizedEmail = email.trim().toLowerCase();
 
   const existingUser = await User.findOne({ email: normalizedEmail });
 
@@ -83,6 +84,7 @@ export const registerUser = async (data: {
     name: user.name,
     email: user.email,
     avatar: user.avatar || "",
+    isEmailVerified: user.isEmailVerified,
   };
 };
 
@@ -160,6 +162,7 @@ export const loginUser = async (
       name: user.name,
       email: user.email,
       avatar: user.avatar || "",
+      isEmailVerified: user.isEmailVerified,
     },
   };
 };
@@ -352,6 +355,7 @@ export const googleAuthService = async (
       name: user.name,
       email: user.email,
       avatar: user.avatar || "",
+      isEmailVerified: user.isEmailVerified,
     },
   };
 };
@@ -399,7 +403,7 @@ export const resetPassword = async (data: {
   if (!validatePassword(newPassword))
     throw new ApiError(
       400,
-      "Password must be atleast 8 characters, include one uppercase, number, symbol",
+      "Password must be at least 8 characters, include one uppercase, number, symbol",
     );
 
 

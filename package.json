@@ -7,7 +7,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +31,7 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
@@ -39,12 +42,20 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^20.11.30",
     "@types/supertest": "^7.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.60.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.6.0",
     "jest": "^30.3.0",
     "mongodb-memory-server": "^11.0.1",
     "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.9",
     "tsx": "^4.21.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.60.0"
   }
 }

@@ -13,11 +13,11 @@ export const errorHandler = (
   let message = "Internal Server Error";
 
 if (err instanceof multer.MulterError) {
-  const message =
+  const multerMessage =
     err.code === "LIMIT_FILE_SIZE"
       ? `File too large. Maximum size is ${config.upload.maxSizeMb}MB`
       : "Upload error";
-   res.status(400).json({ success: false, message });
+   res.status(400).json({ success: false, message: multerMessage });
    return;
 }
 

@@ -7,11 +7,11 @@ import { ApiError } from "../../utils/ApiError";
 import { getJwtSecret } from "../../utils/token.utils";
 
 
-const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES);
-const MAX_ATTEMPTS = Number(process.env.MAX_ATTEMPTS);
-const MAX_SENDS_PER_WINDOW = Number(process.env.MAX_SENDS_PER_WINDOW);
-const VERIFIED_TOKEN_EXPIRY = Number(process.env.VERIFIED_TOKEN_EXPIRY)
-const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS);
+const OTP_EXPIRY_MINUTES   = Number(process.env.OTP_EXPIRY_MINUTES)   || 10;
+const MAX_ATTEMPTS         = Number(process.env.MAX_ATTEMPTS)          || 5;
+const MAX_SENDS_PER_WINDOW = Number(process.env.MAX_SENDS_PER_WINDOW)  || 3;
+const VERIFIED_TOKEN_EXPIRY = process.env.VERIFIED_TOKEN_EXPIRY ?? "15m"; // must be string for jwt.sign
+const BCRYPT_ROUNDS        = Number(process.env.BCRYPT_ROUNDS)         || 10;
 
 
 
@@ -51,17 +51,8 @@ export async function sendOtp(
     const hashedOtp = await bcrypt.hash(rawOtp, BCRYPT_ROUNDS);
 
 
-    await OtpToken.create({
-        email: normalizedEmail,
-        otp: hashedOtp,
-        purpose,
-        expiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
-        verified: false,
-        attempts: 0,
-    });
-
-
-
+    // Send email FIRST — only save to DB if delivery succeeds.
+    // This prevents consuming a rate-limit slot for a code the user never received.
     try {
         await sendOtpEmail(normalizedEmail, rawOtp, purpose);
     } catch (err) {
@@ -72,6 +63,14 @@ export async function sendOtp(
         );
     }
 
+    await OtpToken.create({
+        email: normalizedEmail,
+        otp: hashedOtp,
+        purpose,
+        expiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
+        verified: false,
+        attempts: 0,
+    });
 
 };
 
@@ -145,7 +144,7 @@ export function issueVerifiedToken(
             nonce: crypto.randomUUID(),
         },
         getJwtSecret(),
-        { expiresIn: VERIFIED_TOKEN_EXPIRY },
+        { expiresIn: VERIFIED_TOKEN_EXPIRY as import("jsonwebtoken").SignOptions["expiresIn"] },
     )
 }
 

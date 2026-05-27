@@ -12,7 +12,6 @@ import { MessageType } from "../modules/message/message.model";
 import { emitMessage } from "./socket.emitter";
 import { Socket } from "socket.io";
 import { ApiError } from "../utils/ApiError";
-import { resourceLimits } from "worker_threads";
 import Conversation from "../modules/conversation/conversation.model";
 
 type DeliveryPayload = {

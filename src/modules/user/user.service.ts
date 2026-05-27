@@ -86,7 +86,7 @@ export const getMe = async (userId: string): Promise<UserProfileDto> => {
     throw new ApiError(400, "Invalid user id");
   }
   const user = await User.findById(userId).select(
-    "name email avatar bio status lastSeen provider createdAt",
+    "name email username avatar bio status lastSeen provider isEmailVerified createdAt",
   );
 
   if (!user) throw new ApiError(404, "User not found");
@@ -96,11 +96,13 @@ export const getMe = async (userId: string): Promise<UserProfileDto> => {
     id: user._id.toString(),
     name: user.name,
     email: user.email,
+    username: user.username ?? null,
     avatar: user.avatar ?? "",
     bio: user.bio ?? "",
     status: user.status ?? "offline",
     lastSeen: user.lastSeen ?? null,
     provider: user.provider,
+    isEmailVerified: user.isEmailVerified,
     createdAt: user.createdAt,
   };
 };
@@ -166,7 +168,7 @@ export const searchUsers = async (
 };
 
 const USER_PROFILE_SELECT =
-  "name email avatar avatarPublicId bio status lastSeen provider createdAt";
+  "name email username avatar avatarPublicId bio status lastSeen provider isEmailVerified createdAt";
 
 //Helper: map mongoose document → plain DTO
 // Keeps controller layer clean — it never touches raw mongoose documents
@@ -176,11 +178,13 @@ function toUserProfileDto(user: UserProfileSource): UserProfileDto {
     id: user.id.toString(),
     name: user.name,
     email: user.email,
+    username: user.username ?? null,
     avatar: user.avatar ?? null,
     bio: user.bio ?? null,
     status: user.status ?? "offline",
     lastSeen: user.lastSeen,
     provider: user.provider,
+    isEmailVerified: user.isEmailVerified,
     createdAt: user.createdAt,
   };
 }
@@ -199,6 +203,34 @@ export async function updateProfile(
       throw new ApiError(400, "Name cannot exceed 50 characters");
 
     input.name = trimmed;
+  }
+
+  if (input.username !== undefined) {
+    const trimmedUsername = input.username.trim().toLowerCase();
+
+    if (trimmedUsername === "") {
+      // Allow clearing username (set to null)
+      input.username = undefined; // will be set as null below
+    } else {
+      if (!/^[a-z0-9_]{3,30}$/.test(trimmedUsername)) {
+        throw new ApiError(
+          400,
+          "Username must be 3-30 characters: lowercase letters, numbers, underscores only",
+        );
+      }
+
+      // Check uniqueness (excluding current user)
+      const existing = await User.findOne({
+        username: trimmedUsername,
+        _id: { $ne: userId },
+      });
+
+      if (existing) {
+        throw new ApiError(409, "Username is already taken");
+      }
+
+      input.username = trimmedUsername;
+    }
   }
 
   if (input.bio !== undefined) {
@@ -241,6 +273,7 @@ export async function updateProfile(
   const updateFields: Record<string, unknown> = {};
 
   if (input.name !== undefined) updateFields.name = input.name;
+  if (input.username !== undefined) updateFields.username = input.username || null;
   if (input.bio !== undefined) updateFields.bio = input.bio;
   if (input.avatar !== undefined) updateFields.avatar = input.avatar;
   if (input.avatarPublicId !== undefined)
@@ -265,8 +298,6 @@ export const deleteAvatar = async (userId: string): Promise<UserProfileDto> => {
   const currentUser = await User.findById(userId)
     .select("avatarPublicId")
     .lean<{ avatarPublicId?: string | null }>();
-
-  if (!currentUser) throw new ApiError(404, "User not found");
 
   if (!currentUser) throw new ApiError(404, "User not found");
 

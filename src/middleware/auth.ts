@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { asyncHandler } from "./asyncHandler";
 import { ApiError } from "../utils/ApiError";
-import { User } from "../modules/user/user.model";
 import { getJwtSecret } from "../utils/token.utils";
 
 interface JwtPayload {

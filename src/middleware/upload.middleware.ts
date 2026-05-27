@@ -14,7 +14,7 @@ const fileFilter =(
     if(config.upload.allowedMimeTypes.includes(file.mimetype)){
         cb(null,true);
     } else {
-        cb(new ApiError(400,`File type "${file.mimetype}" is not allowd`) as unknown as Error)
+        cb(new ApiError(400,`File type "${file.mimetype}" is not allowed`) as unknown as Error)
     }
 };
 
