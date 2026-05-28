@@ -23,17 +23,19 @@ function getResendClient(): Resend {
 export async function sendOtpEmail(
     to: string,
     otp: string,
-    purpose: "email_verification" | "forgot_password"
+    purpose: "email_verification" | "forgot_password" | "login_2fa"
 ): Promise<void> {
 
     const subjectMap = {
-        email_verification: "BlinkChat-Verify Your Email",
+        email_verification: "BlinkChat - Verify Your Email",
         forgot_password: "BlinkChat - Reset your password",
+        login_2fa: "BlinkChat - Your login verification code",
     } as const;
 
     const purposeTextMap = {
         email_verification: "verify your email address",
         forgot_password: "reset your password",
+        login_2fa: "complete your login",
     } as const;
 
 

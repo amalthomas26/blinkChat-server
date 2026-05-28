@@ -21,6 +21,13 @@ export const getRefreshSecret = (): string => {
   return secret;
 };
 
+// Separate secret for OTP proof tokens (email verification, password reset, 2FA).
+// Set OTP_PROOF_SECRET in your .env for proper secret separation.
+// Falls back to JWT_SECRET for backwards compatibility if not configured.
+export const getOtpProofSecret = (): string => {
+  return process.env.OTP_PROOF_SECRET || getJwtSecret();
+};
+
 export const generateAccessToken = (payload: TokenPayload): string => {
   const options: SignOptions = {
     expiresIn:

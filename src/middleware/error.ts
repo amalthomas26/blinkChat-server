@@ -26,7 +26,8 @@ if (err instanceof multer.MulterError) {
     statusCode = err.statusCode;
     message = err.message;
   } else if (err instanceof Error) {
-    message = err.message;
+    message =
+      process.env.NODE_ENV === "production" ? "Internal Server Error" : err.message;
   }
 
   res.status(statusCode).json({

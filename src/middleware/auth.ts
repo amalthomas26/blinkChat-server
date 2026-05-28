@@ -6,6 +6,7 @@ import { getJwtSecret } from "../utils/token.utils";
 
 interface JwtPayload {
   userId: string;
+  type?: string;
 }
 
 export const protect = asyncHandler(
@@ -26,7 +27,12 @@ export const protect = asyncHandler(
     } catch {
       throw new ApiError(401, "Invalid token");
     }
-    if (!decoded.userId) throw new ApiError(401, "Invalid token");
+
+    // Reject non-access tokens (e.g. OTP proof tokens that share the same
+    // signing secret when OTP_PROOF_SECRET is not configured separately).
+    if (!decoded.userId || decoded.type !== "access") {
+      throw new ApiError(401, "Invalid token");
+    }
 
     req.user = {
       id: decoded.userId,
@@ -34,3 +40,4 @@ export const protect = asyncHandler(
     next();
   },
 );
+

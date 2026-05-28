@@ -16,6 +16,10 @@ import {
 import { ApiError } from "../../utils/ApiError";
 import { getIO } from "../../socket/socket.server";
 import { presenceStore } from "../../socket/presence.store";
+import {
+  clearRefreshTokenCookieOptions,
+  refreshCookieName,
+} from "../../config/env";
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const dto = await getMeService(req.user.id);
@@ -36,7 +40,7 @@ export const getPresence = asyncHandler(async (req: Request, res: Response) => {
       "cannot request presence for more than 50 users at once",
     );
 
-  const presenceData = await getPresenceStatus(userIds);
+  const presenceData = await getPresenceStatus(userIds, req.user.id);
 
   res.status(200).json({
     success: true,
@@ -45,7 +49,7 @@ export const getPresence = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
-  const dto = await getUserByIdService(req.params.id);
+  const dto = await getUserByIdService(req.params.id, req.user.id);
   res.status(200).json({ success: true, data: dto });
 });
 
@@ -122,7 +126,7 @@ export const deleteAccountController = asyncHandler(
 
     await deleteAccount(userId);
 
-    res.clearCookie("token");
+    res.clearCookie(refreshCookieName, clearRefreshTokenCookieOptions);
 
     const io = getIO();
     const socketIds = presenceStore.getSockets(userId);

@@ -106,7 +106,7 @@ const buildCookieBaseOptions = (
   }
 
   const cookieDomain = env.COOKIE_DOMAIN?.trim() || undefined;
-  const refreshCookiePath = env.REFRESH_COOKIE_PATH?.trim() || "/api/auth";
+  const refreshCookiePath = env.REFRESH_COOKIE_PATH?.trim() || "/";
 
   return {
     httpOnly: true,

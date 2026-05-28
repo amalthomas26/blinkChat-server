@@ -21,6 +21,7 @@ import {
   refreshLimiter,
   forgotPasswordLimiter,
   resetPasswordLimiter,
+  twoFALimiter,
 } from "../../middleware/rateLimiter";
 
 import otpRoutes from "../otp/otp.routes";
@@ -33,8 +34,8 @@ router.use("/otp", otpRoutes);
 //Public (unauthenticated) routes
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
-router.post("/verify-2fa", loginLimiter, verifyLogin2FAController);
-router.post("/google", googleAuth);
+router.post("/verify-2fa", twoFALimiter, verifyLogin2FAController);
+router.post("/google", loginLimiter, googleAuth);
 router.post("/refresh", refreshLimiter, refresh);
 router.post("/logout", logout);
 

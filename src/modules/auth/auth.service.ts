@@ -108,13 +108,13 @@ export const loginUser = async (
   const normalizedEmail = email.trim().toLowerCase();
 
   const user = await User.findOne({ email: normalizedEmail }).select(
-    "+password twoFactorEnabled",
+    "+password",
   );
 
   if (!user) throw new ApiError(400, "Invalid credentials");
 
   if (user.provider !== "local") {
-    throw new ApiError(400, "Use Google login");
+    throw new ApiError(400, "This account uses Google sign-in. Please click 'Continue with Google' to log in.");
   }
 
   const isMatch = await user.comparePassword(password);
@@ -351,22 +351,18 @@ export const googleAuthService = async (
 ) => {
   if (!googleToken) throw new ApiError(400, "Google token is required");
 
-  let payload;
+  // Cryptographically verify the ID token using Google's public keys.
+  // This also validates the 'aud' claim matches our GOOGLE_CLIENT_ID,
+  // preventing tokens issued for other apps from being accepted here.
+  let payload: import("google-auth-library").TokenPayload | undefined;
   try {
-    const response = await fetch(
-      "https://www.googleapis.com/oauth2/v3/userinfo",
-      {
-        headers: { Authorization: `Bearer ${googleToken}` },
-      },
-    );
-
-    if (!response.ok) {
-      throw new ApiError(400, "Invalid Google token");
-    }
-
-    payload = await response.json();
-  } catch (error) {
-    throw new ApiError(400, "Failed to fetch Google user info");
+    const ticket = await googleClient.verifyIdToken({
+      idToken: googleToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch {
+    throw new ApiError(400, "Invalid Google token");
   }
 
   if (!payload || !payload.email) {
@@ -378,12 +374,19 @@ export const googleAuthService = async (
   let user = await User.findOne({ email: normalizedEmail });
 
   if (user) {
-    if (user.provider !== "google") {
-      throw new ApiError(
-        400,
-        "User already exists with local login please sign in with your password.",
-      );
+    if (user.provider === "local") {
+      // The user previously registered with email/password but is now signing
+      // in with Google (which has already verified this email address).
+      // Safely link the Google identity to the existing account.
+      user.provider = "google";
+      user.googleId = payload.sub;
+      // Optionally update avatar from Google if none is set
+      if (!user.avatar && payload.picture) {
+        user.avatar = payload.picture;
+      }
+      await user.save();
     }
+    // If provider is already "google", fall through normally.
   } else {
     user = await User.create({
       name: payload.name || "Google user",

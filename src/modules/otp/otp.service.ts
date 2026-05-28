@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import OtpToken, { OtpPurpose } from "./otpToken.model";
 import { sendOtpEmail } from "./email.services";
 import { ApiError } from "../../utils/ApiError";
-import { getJwtSecret } from "../../utils/token.utils";
+import { getJwtSecret, getOtpProofSecret } from "../../utils/token.utils";
 
 
 const OTP_EXPIRY_MINUTES   = Number(process.env.OTP_EXPIRY_MINUTES)   || 10;
@@ -143,7 +143,7 @@ export function issueVerifiedToken(
             type: "otp_proof",
             nonce: crypto.randomUUID(),
         },
-        getJwtSecret(),
+        getOtpProofSecret(),
         { expiresIn: VERIFIED_TOKEN_EXPIRY as import("jsonwebtoken").SignOptions["expiresIn"] },
     )
 }
@@ -154,7 +154,7 @@ export function validateVerifiedToken(
     expectedEmail: string,
 ): { email: string; purpose: OtpPurpose; nonce: string } {
     try {
-        const decoded = jwt.verify(token, getJwtSecret()) as {
+        const decoded = jwt.verify(token, getOtpProofSecret()) as {
             email: string;
             purpose: OtpPurpose;
             type: string;

@@ -57,6 +57,7 @@ export const setUserOnline = async (userId: string): Promise<void> => {
 
 export const getPresenceStatus = async (
   userIds: string[],
+  requestingUserId?: string,
 ): Promise<Record<string, { status: string; lastSeen: Date | null }>> => {
   const validIds = userIds.filter(isValidObjectId);
 
@@ -70,13 +71,37 @@ export const getPresenceStatus = async (
       { _id: mongoose.Types.ObjectId; status: string; lastSeen: Date | null }[]
     >();
 
+  // Build set of user IDs that have a block relationship with the requester.
+  // Both directions: requester blocked them OR they blocked the requester.
+  let blockedSet = new Set<string>();
+  if (requestingUserId && isValidObjectId(requestingUserId)) {
+    const blockRecords = await Block.find({
+      $or: [
+        { blocker: requestingUserId },
+        { blocked: requestingUserId },
+      ],
+    }).lean();
+    for (const b of blockRecords) {
+      blockedSet.add(b.blocker.toString());
+      blockedSet.add(b.blocked.toString());
+    }
+    // Don't mask the requester themselves
+    blockedSet.delete(requestingUserId);
+  }
+
   const result: Record<string, { status: string; lastSeen: Date | null }> = {};
 
   for (const user of users) {
-    result[user._id.toString()] = {
-      status: user.status || "offline",
-      lastSeen: user.lastSeen || null,
-    };
+    const id = user._id.toString();
+    if (blockedSet.has(id)) {
+      // Mask presence for blocked users — always appear offline
+      result[id] = { status: "offline", lastSeen: null };
+    } else {
+      result[id] = {
+        status: user.status || "offline",
+        lastSeen: user.lastSeen || null,
+      };
+    }
   }
   return result;
 };
@@ -121,6 +146,7 @@ export const getMe = async (userId: string): Promise<UserProfileDto> => {
 
 export const getUserById = async (
   targetId: string,
+  requestingUserId?: string,
 ): Promise<PublicUserProfileDto> => {
   if (!isValidObjectId(targetId)) throw new ApiError(400, "Invalid user ID");
 
@@ -130,13 +156,26 @@ export const getUserById = async (
 
   if (!user) throw new ApiError(404, "User not found");
 
+  // Check block relationship — if either party has blocked the other,
+  // hide the avatar and mask online status from the requesting user.
+  let isBlocked = false;
+  if (requestingUserId && isValidObjectId(requestingUserId)) {
+    const blockExists = await Block.findOne({
+      $or: [
+        { blocker: requestingUserId, blocked: targetId },
+        { blocker: targetId, blocked: requestingUserId },
+      ],
+    });
+    isBlocked = !!blockExists;
+  }
+
   return {
     id: user._id.toString(),
     name: user.name,
-    avatar: user.avatar ?? "",
-    bio: user.bio ?? "",
-    status: user.status ?? "offline",
-    lastSeen: user.lastSeen ?? null,
+    avatar: isBlocked ? "" : (user.avatar ?? ""),
+    bio: isBlocked ? "" : (user.bio ?? ""),
+    status: isBlocked ? "offline" : (user.status ?? "offline"),
+    lastSeen: isBlocked ? null : (user.lastSeen ?? null),
     createdAt: user.createdAt,
   };
 };

@@ -107,6 +107,19 @@ const userSchema = new Schema<IUserDocument>(
       index: true,
       default: null,
     },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    notificationPrefs: {
+      browserNotifications: { type: Boolean, default: true },
+      sounds: { type: Boolean, default: true },
+      muteAll: { type: Boolean, default: false },
+    },
+    privacyPrefs: {
+      showOnlineStatus: { type: Boolean, default: true },
+      showLastSeen: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,
