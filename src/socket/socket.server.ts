@@ -8,7 +8,10 @@ import { verifySocketToken } from "./socket.auth";
 import { registerMessageHandlers } from "./message.handler";
 import { registerEvents } from "./socket.event";
 import { registerTypingHandlers } from "./typing.handler";
-import { updateLastSeen,setUserOnline } from "../modules/user/user.service";
+import { updateLastSeen, setUserOnline } from "../modules/user/user.service";
+import { User } from "../modules/user/user.model";
+import { Block } from "../modules/user/block.model";
+
 import { ApiError } from "../utils/ApiError";
 import { socketCorsOptions } from "../config/env";
 import {registerCallHandlers} from "./call.handler";
@@ -43,7 +46,15 @@ export const initSocket = (server: HTTPServer) => {
         console.error("Failed to set user online in DB",err)
       )
 
-      socket.broadcast.emit("user_online", { userId });
+      // Only broadcast online status if the user hasn't disabled showOnlineStatus
+      User.findById(userId).select("privacyPrefs").lean().then((user) => {
+        if (user?.privacyPrefs?.showOnlineStatus !== false) {
+          socket.broadcast.emit("user_online", { userId });
+        }
+      }).catch(() => {
+        // If lookup fails, broadcast anyway (fail-safe)
+        socket.broadcast.emit("user_online", { userId });
+      });
       registerEvents(socket);
       registerMessageHandlers(io, socket);
       registerTypingHandlers(socket);
@@ -51,14 +62,56 @@ export const initSocket = (server: HTTPServer) => {
 
       // Presence sync: client calls this on connect/reconnect to get
       // accurate online state instead of relying on missed events.
-      socket.on("get_presence", (userIds: unknown, callback: unknown) => {
+      socket.on("get_presence", async (userIds: unknown, callback: unknown) => {
         if (typeof callback !== "function") return;
         if (!Array.isArray(userIds)) return (callback as (v: string[]) => void)([]);
-        const online = (userIds as string[]).filter(
+
+        // First filter to only actually-online users
+        const onlineIds = (userIds as string[]).filter(
           (id) => typeof id === "string" && presenceStore.isOnline(id),
         );
-        (callback as (v: string[]) => void)(online);
+
+        if (onlineIds.length === 0) {
+          return (callback as (v: string[]) => void)([]);
+        }
+
+        try {
+          // Filter out users who have disabled showOnlineStatus
+          // AND users who have a block relationship with the requester
+          const [visibleUsers, blocks] = await Promise.all([
+            User.find({
+              _id: { $in: onlineIds },
+              "privacyPrefs.showOnlineStatus": { $ne: false },
+            }).select("_id").lean<{ _id: { toString(): string } }[]>(),
+
+            Block.find({
+              $or: [
+                { blocker: userId, blocked: { $in: onlineIds } },
+                { blocker: { $in: onlineIds }, blocked: userId },
+              ],
+            }).select("blocker blocked").lean<{ blocker: { toString(): string }; blocked: { toString(): string } }[]>(),
+          ]);
+
+          // Build set of IDs that have a block with the requester
+          const blockedIds = new Set<string>();
+          blocks.forEach((b) => {
+            const bid = b.blocker.toString();
+            const blkd = b.blocked.toString();
+            if (bid !== userId) blockedIds.add(bid);
+            if (blkd !== userId) blockedIds.add(blkd);
+          });
+
+          const visibleIds = visibleUsers
+            .map((u) => u._id.toString())
+            .filter((id) => !blockedIds.has(id));
+
+          (callback as (v: string[]) => void)(visibleIds);
+        } catch {
+          // On DB error, fall back to the unfiltered online list
+          (callback as (v: string[]) => void)(onlineIds);
+        }
       });
+
 
       socket.on("disconnect", async () => {
         try {
@@ -71,8 +124,18 @@ export const initSocket = (server: HTTPServer) => {
             socketId: socket.id,
           });
           if (!presenceStore.isOnline(removedUserId)) {
-            socket.broadcast.emit("user_offline", {
-              userId: removedUserId,
+            // Only broadcast offline if the user has showOnlineStatus enabled
+            // (if they never appeared online to peers, no need to announce offline)
+            User.findById(removedUserId).select("privacyPrefs").lean().then((user) => {
+              if (user?.privacyPrefs?.showOnlineStatus !== false) {
+                socket.broadcast.emit("user_offline", {
+                  userId: removedUserId,
+                });
+              }
+            }).catch(() => {
+              socket.broadcast.emit("user_offline", {
+                userId: removedUserId,
+              });
             });
 
             await updateLastSeen(removedUserId);

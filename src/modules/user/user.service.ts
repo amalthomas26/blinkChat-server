@@ -66,9 +66,14 @@ export const getPresenceStatus = async (
   }
 
   const users = await User.find({ _id: { $in: validIds } })
-    .select("_id status lastSeen")
+    .select("_id status lastSeen privacyPrefs")
     .lean<
-      { _id: mongoose.Types.ObjectId; status: string; lastSeen: Date | null }[]
+      {
+        _id: mongoose.Types.ObjectId;
+        status: string;
+        lastSeen: Date | null;
+        privacyPrefs?: { showOnlineStatus: boolean; showLastSeen: boolean };
+      }[]
     >();
 
   // Build set of user IDs that have a block relationship with the requester.
@@ -97,9 +102,12 @@ export const getPresenceStatus = async (
       // Mask presence for blocked users — always appear offline
       result[id] = { status: "offline", lastSeen: null };
     } else {
+      // Respect the user's own privacy preferences
+      const showOnline = user.privacyPrefs?.showOnlineStatus !== false;
+      const showLastSeen = user.privacyPrefs?.showLastSeen !== false;
       result[id] = {
-        status: user.status || "offline",
-        lastSeen: user.lastSeen || null,
+        status: showOnline ? (user.status || "offline") : "offline",
+        lastSeen: showLastSeen ? (user.lastSeen || null) : null,
       };
     }
   }
@@ -151,7 +159,7 @@ export const getUserById = async (
   if (!isValidObjectId(targetId)) throw new ApiError(400, "Invalid user ID");
 
   const user = await User.findById(targetId).select(
-    "name avatar bio status lastSeen createdAt",
+    "name avatar bio status lastSeen privacyPrefs createdAt",
   );
 
   if (!user) throw new ApiError(404, "User not found");
@@ -169,13 +177,17 @@ export const getUserById = async (
     isBlocked = !!blockExists;
   }
 
+  // Respect the target user's privacy prefs for non-blocked users
+  const showOnline = !isBlocked && user.privacyPrefs?.showOnlineStatus !== false;
+  const showLastSeen = !isBlocked && user.privacyPrefs?.showLastSeen !== false;
+
   return {
     id: user._id.toString(),
     name: user.name,
     avatar: isBlocked ? "" : (user.avatar ?? ""),
     bio: isBlocked ? "" : (user.bio ?? ""),
-    status: isBlocked ? "offline" : (user.status ?? "offline"),
-    lastSeen: isBlocked ? null : (user.lastSeen ?? null),
+    status: showOnline ? (user.status ?? "offline") : "offline",
+    lastSeen: showLastSeen ? (user.lastSeen ?? null) : null,
     createdAt: user.createdAt,
   };
 };

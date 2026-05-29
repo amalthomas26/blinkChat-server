@@ -581,6 +581,36 @@ export const listConversationsForUser = async (
   const directUsersMap = new Map<string, ConversationListUserDto>();
   directUsers.forEach(u => directUsersMap.set(u._id.toString(), toConversationUserDto(u)));
 
+  // Collect all direct-chat peer IDs so we can batch-check blocks once
+  const directPeerIds = new Set<string>();
+  pageRows.forEach((row) => {
+    if (!row.conversation.isGroup && row.conversation.participants) {
+      row.conversation.participants.forEach((pid) => {
+        const s = pid.toString();
+        if (s !== userId) directPeerIds.add(s);
+      });
+    }
+  });
+
+  // Batch-fetch all block relationships between current user and these peers
+  const blockedPeerIds = new Set<string>();
+  if (directPeerIds.size > 0) {
+    const blocks = await Block.find({
+      $or: [
+        { blocker: userId, blocked: { $in: Array.from(directPeerIds) } },
+        { blocker: { $in: Array.from(directPeerIds) }, blocked: userId },
+      ],
+    }).select("blocker blocked").lean<{ blocker: { toString(): string }; blocked: { toString(): string } }[]>();
+
+    blocks.forEach((b) => {
+      // Add whichever side is the peer (not userId)
+      const blockerId = b.blocker.toString();
+      const blockedId = b.blocked.toString();
+      if (blockerId !== userId) blockedPeerIds.add(blockerId);
+      if (blockedId !== userId) blockedPeerIds.add(blockedId);
+    });
+  }
+
   const conversations = pageRows.map((row) => {
     const conversation = row.conversation;
 
@@ -602,9 +632,14 @@ export const listConversationsForUser = async (
          .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
     }
 
-    const peer = conversation.isGroup
+    let peer = conversation.isGroup
       ? null
       : (participants.find((participant) => participant.id !== userId) ?? null);
+
+    // Mask blocked peer's avatar, status and lastSeen
+    if (peer && blockedPeerIds.has(peer.id)) {
+      peer = { ...peer, avatar: "", status: "offline", lastSeen: null };
+    }
 
     const actualLastMessage = row.lastMessageDoc ?? null;
     const lastMessage = actualLastMessage
@@ -648,6 +683,7 @@ export const listConversationsForUser = async (
 
   return { conversations, hasNextPage, nextCursor };
 };
+
 
 export const getConversationDetails = async (
   conversationId: string,
@@ -714,9 +750,23 @@ export const getConversationDetails = async (
         left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
     );
   }
-  const peer = conversation.isGroup
+
+  let peer = conversation.isGroup
     ? null
     : (participants.find((p) => p.id !== userId) ?? null);
+
+  // For direct conversations: mask blocked peer's avatar, status, and lastSeen
+  if (!conversation.isGroup && peer) {
+    const blockExists = await Block.exists({
+      $or: [
+        { blocker: userId, blocked: peer.id },
+        { blocker: peer.id, blocked: userId },
+      ],
+    });
+    if (blockExists) {
+      peer = { ...peer, avatar: "", status: "offline", lastSeen: null };
+    }
+  }
 
   const lastMessage = conversation.lastMessage
     ? toConversationMessageDto(conversation.lastMessage)
