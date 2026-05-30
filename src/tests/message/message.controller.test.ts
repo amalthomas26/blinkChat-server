@@ -1,3 +1,5 @@
+import type { NextFunction, Request, Response } from "express";
+
 import { 
   sendMessage as sendMessageController,
   reactToMessageController,
@@ -8,8 +10,13 @@ import {
   reactToMessage as reactToMessageService,
   removeReaction as removeReactionService
 } from "../../modules/message/message.service";
-import { getIO } from "../../socket/socket.server";
 import { emitMessage } from "../../socket/socket.emitter";
+import { getIO } from "../../socket/socket.server";
+
+type MockResponse = {
+  status: jest.Mock;
+  json: jest.Mock;
+};
 
 jest.mock("../../modules/message/message.service", () => ({
   sendMessage: jest.fn(),
@@ -26,8 +33,8 @@ jest.mock("../../socket/socket.emitter", () => ({
   emitMessage: jest.fn(),
 }));
 
-const createResponse = () => {
-  const res: any = {};
+const createResponse = (): MockResponse => {
+  const res = {} as MockResponse;
   res.status = jest.fn().mockReturnValue(res);
   res.json = jest.fn().mockReturnValue(res);
   return res;
@@ -39,7 +46,7 @@ describe("Message Controller - sendMessage transport parity", () => {
   });
 
   it("emits receive_message after a newly created REST send", async () => {
-    const io = { to: jest.fn() } as any;
+    const io = { to: jest.fn() };
     const message = {
       _id: "507f1f77bcf86cd799439012",
       conversationId: "507f1f77bcf86cd799439099",
@@ -57,18 +64,18 @@ describe("Message Controller - sendMessage transport parity", () => {
       wasCreated: true,
     });
 
-    const req: any = {
+    const req = {
       user: { id: "507f1f77bcf86cd799439011" },
       body: {
         conversationId: message.conversationId,
         content: message.content,
         clientTempId: message.clientTempId,
       },
-    };
+    } as unknown as Request;
     const res = createResponse();
-    const next = jest.fn();
+    const next = jest.fn() as jest.MockedFunction<NextFunction>;
 
-    await sendMessageController(req, res, next);
+    await sendMessageController(req, res as unknown as Response, next);
 
     expect(sendMessageService).toHaveBeenCalledWith(req.user.id, req.body);
     expect(getIO).toHaveBeenCalledTimes(1);
@@ -103,18 +110,18 @@ describe("Message Controller - sendMessage transport parity", () => {
       wasCreated: false,
     });
 
-    const req: any = {
+    const req = {
       user: { id: "507f1f77bcf86cd799439011" },
       body: {
         conversationId: message.conversationId,
         content: message.content,
         clientTempId: message.clientTempId,
       },
-    };
+    } as unknown as Request;
     const res = createResponse();
-    const next = jest.fn();
+    const next = jest.fn() as jest.MockedFunction<NextFunction>;
 
-    await sendMessageController(req, res, next);
+    await sendMessageController(req, res as unknown as Response, next);
 
     expect(getIO).not.toHaveBeenCalled();
     expect(emitMessage).not.toHaveBeenCalled();
@@ -137,23 +144,23 @@ describe("Message Controller - Reactions", () => {
   const mockEmit = jest.fn();
   const io = {
     to: mockTo.mockReturnValue({ emit: mockEmit }),
-  } as any;
+  };
 
   it("should successfully add a reaction and emit message_reaction_added", async () => {
     (getIO as jest.Mock).mockReturnValue(io);
 
-    const req: any = {
+    const req = {
       user: { id: "user_a_id" },
       params: { id: "msg_id" },
       body: {
         conversationId: "conv_id",
         emoji: "👍",
       },
-    };
+    } as unknown as Request;
     const res = createResponse();
-    const next = jest.fn();
+    const next = jest.fn() as jest.MockedFunction<NextFunction>;
 
-    await reactToMessageController(req, res, next);
+    await reactToMessageController(req, res as unknown as Response, next);
 
     expect(reactToMessageService).toHaveBeenCalledWith("msg_id", "user_a_id", "👍");
     expect(getIO).toHaveBeenCalledTimes(1);
@@ -173,17 +180,17 @@ describe("Message Controller - Reactions", () => {
   it("should successfully remove a reaction and emit message_reaction_removed", async () => {
     (getIO as jest.Mock).mockReturnValue(io);
 
-    const req: any = {
+    const req = {
       user: { id: "user_a_id" },
       params: { id: "msg_id" },
       body: {
         conversationId: "conv_id",
       },
-    };
+    } as unknown as Request;
     const res = createResponse();
-    const next = jest.fn();
+    const next = jest.fn() as jest.MockedFunction<NextFunction>;
 
-    await removeReactionController(req, res, next);
+    await removeReactionController(req, res as unknown as Response, next);
 
     expect(removeReactionService).toHaveBeenCalledWith("msg_id", "user_a_id");
     expect(getIO).toHaveBeenCalledTimes(1);

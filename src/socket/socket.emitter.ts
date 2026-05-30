@@ -1,8 +1,9 @@
-import type { TypedIO } from "./socket.types";
+import Conversation from "../modules/conversation/conversation.model";
 import type { MessageDto } from "../modules/message/message.types";
 import { isValidObjectId } from "../utils/objectId";
-import Conversation from "../modules/conversation/conversation.model";
+
 import { presenceStore } from "./presence.store";
+import type { TypedIO } from "./socket.types";
 
 const safeEmit = (fn: () => void, context: string) => {
   try {

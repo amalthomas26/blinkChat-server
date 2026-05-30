@@ -1,12 +1,13 @@
 import mongoose from "mongoose";
-import { updateProfile, searchUsers, blockUser, unblockUser, getBlockedUsers, deleteAccount } from "../../modules/user/user.service";
-import { Block } from "../../modules/user/block.model";
-import { ConversationParticipant } from "../../modules/conversation/conversationParticipant.model";
-import Conversation from "../../modules/conversation/conversation.model";
-import Message from "../../modules/message/message.model";
-import { User } from "../../modules/user/user.model";
-import * as uploadService from "../../modules/upload/upload.service";
+
 import { runtimeConfig as config } from "../../config/env";
+import Conversation from "../../modules/conversation/conversation.model";
+import { ConversationParticipant } from "../../modules/conversation/conversationParticipant.model";
+import Message from "../../modules/message/message.model";
+import * as uploadService from "../../modules/upload/upload.service";
+import { Block } from "../../modules/user/block.model";
+import { User } from "../../modules/user/user.model";
+import { updateProfile, searchUsers, blockUser, unblockUser, getBlockedUsers, deleteAccount } from "../../modules/user/user.service";
 
 jest.mock("../../modules/upload/upload.service", () => ({
   deleteFile: jest.fn(),

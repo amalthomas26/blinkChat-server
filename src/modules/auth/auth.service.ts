@@ -1,17 +1,21 @@
 import crypto from "crypto";
+
+import { OAuth2Client } from "google-auth-library";
 import mongoose from "mongoose";
+
 import { ApiError } from "../../utils/ApiError";
-import { validatePassword } from "../../utils/validatePassword";
 import {
   generateAccessToken,
   generateRefreshToken,
   hashToken,
 } from "../../utils/token.utils";
-import { User } from "../user/user.model";
-import RefreshToken from "./refreshToken.model";
-import { OAuth2Client } from "google-auth-library";
+import { validatePassword } from "../../utils/validatePassword";
 import { sendOtp, verifyOtp, validateVerifiedToken } from "../otp/otp.service";
+import { User } from "../user/user.model";
+
 import { LoginResult, SessionDto } from "./auth.types";
+import RefreshToken from "./refreshToken.model";
+
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -319,6 +323,7 @@ export const refreshTokenService = async (token: string) => {
       refreshToken: newRaw,
     };
   } catch (err) {
+    console.error("REFRESH TOKEN ERROR:", err);
     await session.abortTransaction();
     throw err;
   } finally {

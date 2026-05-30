@@ -1,5 +1,6 @@
-import mongoose, { Schema, Document, Model } from "mongoose";
 import bcrypt from "bcryptjs";
+import mongoose, { Schema, Document, Model } from "mongoose";
+
 import type { AuthProvider } from "../auth/auth.types";
 
 export interface IUserDocument extends Document {

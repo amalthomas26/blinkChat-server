@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction } from "express";
-import { ApiError } from "../utils/ApiError";
 import multer from "multer";
+
 import { runtimeConfig as config } from "../config/env";
+import { ApiError } from "../utils/ApiError";
 
 export const errorHandler = (
   err: unknown,
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void => {
+  void _next;
   let statusCode = 500;
   let message = "Internal Server Error";
 

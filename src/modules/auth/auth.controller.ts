@@ -1,5 +1,12 @@
 import { Request, Response } from "express";
+
+import {
+  clearRefreshTokenCookieOptions,
+  refreshCookieName,
+  refreshTokenCookieOptions,
+} from "../../config/env";
 import { asyncHandler } from "../../middleware/asyncHandler";
+
 import {
   registerUser,
   loginUser,
@@ -13,11 +20,6 @@ import {
   getSessions,
   revokeSession,
 } from "./auth.service";
-import {
-  clearRefreshTokenCookieOptions,
-  refreshCookieName,
-  refreshTokenCookieOptions,
-} from "../../config/env";
 import { googleAuthService } from "./auth.service";
 
 type RegisterInput = {
@@ -33,53 +35,44 @@ type LoginInput = {
   password: string;
 };
 
-export const register = asyncHandler(
-  async (req: Request<{}, {}, RegisterInput>, res: Response) => {
-    const user = await registerUser(req.body);
+export const register = asyncHandler(async (req: Request, res: Response) => {
+  const user = await registerUser(req.body as RegisterInput);
 
-    return res.status(201).json({
-      success: true,
-      data: user,
-    });
-  },
-);
+  return res.status(201).json({
+    success: true,
+    data: user,
+  });
+});
 
-export const login = asyncHandler(
-  async (req: Request<{}, {}, LoginInput>, res: Response) => {
-    const result = await loginUser(req.body, {
-      device: req.headers["x-device"] as string,
-      ip: req.ip,
-      userAgent: req.headers["user-agent"],
-    });
+export const login = asyncHandler(async (req: Request, res: Response) => {
+  const result = await loginUser(req.body as LoginInput, {
+    device: req.headers["x-device"] as string,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"],
+  });
 
-    //2FA required: return early without tokens
-    if (result.requires2FA) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          requires2FA: true,
-          email: result.email,
-        },
-      });
-    }
-
-    // Normal login (no 2FA)
-    res.cookie(
-      refreshCookieName,
-      result.refreshToken,
-      refreshTokenCookieOptions,
-    );
-
+  //2FA required: return early without tokens
+  if (result.requires2FA) {
     return res.status(200).json({
       success: true,
       data: {
-        accessToken: result.accessToken,
-        user: result.user,
+        requires2FA: true,
+        email: result.email,
       },
     });
-  },
-);
+  }
 
+  // Normal login (no 2FA)
+  res.cookie(refreshCookieName, result.refreshToken, refreshTokenCookieOptions);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      accessToken: result.accessToken,
+      user: result.user,
+    },
+  });
+});
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const token = req.cookies?.[refreshCookieName];
@@ -153,20 +146,17 @@ export const googleAuth = asyncHandler(async (req: Request, res: Response) => {
 
 export const forgotPasswordController = asyncHandler(
   async (req: Request, res: Response) => {
-
     const { email } = req.body;
 
     await forgotPassword(email);
 
     return res.status(200).json({
       success: true,
-      message: "If an account with that email exists, a verification code has been sent."
+      message:
+        "If an account with that email exists, a verification code has been sent.",
     });
-
-
   },
 );
-
 
 export const resetPasswordController = asyncHandler(
   async (req: Request, res: Response) => {

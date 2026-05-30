@@ -1,12 +1,16 @@
-import Call, { ICall } from "./call.model";
-import { User } from "../user/user.model";
-import { Block } from "../user/block.model";
-import { presenceStore } from "../../socket/presence.store";
-import { isValidObjectId } from "../../utils/objectId";
-import { ApiError } from "../../utils/ApiError";
 import crypto from "crypto";
 
+import { Types } from "mongoose";
+
+import { presenceStore } from "../../socket/presence.store";
+import { ApiError } from "../../utils/ApiError";
+import { isValidObjectId } from "../../utils/objectId";
+import { Block } from "../user/block.model";
+import { User } from "../user/user.model";
+
+import Call, { ICall } from "./call.model";
 import {
+  CallType,
   CallStatus,
   VALID_TRANSITIONS,
   InitiateCallInput,
@@ -24,7 +28,7 @@ import {
   IceConfigDto,
   IceServer,
 } from "./call.types";
-import { Types } from "mongoose";
+
 
 class CallTimeoutManager {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -365,8 +369,9 @@ export const endCall = async (input: EndCallInput): Promise<EndCallResult> => {
 export const failCall = async (
   callId: string,
   userId: string,
-  reason: string,
+  _reason: string,
 ): Promise<EndCallResult> => {
+  void _reason;
   const call = await Call.findById(callId).lean<ICall>();
 
   if (!call) throw new ApiError(404, "Call not found");
@@ -400,7 +405,7 @@ export const failCall = async (
 export const relaySdpOffer = async (
   input: RelaySDPInput,
 ): Promise<RelayTarget> => {
-  const { callId, userId, sdp } = input;
+  const { callId, userId } = input;
   const call = await Call.findById(callId).lean<ICall>();
 
   if (!call) throw new ApiError(404, "Call not found");
@@ -420,7 +425,7 @@ export const relaySdpOffer = async (
 export const relaySdpAnswer = async (
   input: RelaySDPInput,
 ): Promise<RelayTarget> => {
-  const { callId, userId, sdp } = input;
+  const { callId, userId } = input;
 
   const call = await Call.findById(callId).lean<ICall>();
 
@@ -441,7 +446,7 @@ export const relaySdpAnswer = async (
 export const relayIceCandidate = async (
   input: RelayICEInput,
 ): Promise<RelayTarget> => {
-  const { callId, userId, candidate } = input;
+  const { callId, userId } = input;
 
   const call = await Call.findById(callId).lean<ICall>();
 
@@ -512,8 +517,9 @@ const handleCallTimeout = async (
 
 export const handleUserReconnect = async (
   callId: string,
-  userId: string,
+  _userId: string,
 ): Promise<void> => {
+  void _userId;
   const call = await Call.findById(callId).lean<ICall>();
 
   if (!call) throw new ApiError(404, "Call not found");
@@ -703,6 +709,27 @@ export const getCallHistory = async (
   page: number;
   totalPages: number;
 }> => {
+  type CallHistoryUser = {
+    _id: Types.ObjectId;
+    name?: string;
+    avatar?: string;
+  };
+
+  type CallHistoryRecord = {
+    _id: Types.ObjectId;
+    callerId: Types.ObjectId | CallHistoryUser;
+    receiverId: Types.ObjectId | CallHistoryUser;
+    callType: CallType;
+    status: CallStatus;
+    duration: number | null;
+    createdAt: Date;
+    endedAt: Date | null;
+  };
+
+  const isCallHistoryUser = (
+    value: Types.ObjectId | CallHistoryUser,
+  ): value is CallHistoryUser => "name" in value || "avatar" in value;
+
   const skip = (page - 1) * limit;
 
   const filter = {
@@ -725,21 +752,23 @@ export const getCallHistory = async (
       .limit(limit)
       .populate("callerId", "name avatar")
       .populate("receiverId", "name avatar")
-      .lean(),
+      .lean<CallHistoryRecord[]>(),
     Call.countDocuments(filter),
   ]);
 
   const mapped = calls.map((call) => {
-    const callerStr = call.callerId?._id?.toString() ?? call.callerId?.toString();
+    const callerStr = isCallHistoryUser(call.callerId)
+      ? call.callerId._id.toString()
+      : call.callerId.toString();
     const isOutgoing = callerStr === userId;
     const peerPopulated = isOutgoing ? call.receiverId : call.callerId;
     const peerObj =
-      typeof peerPopulated === "object" && peerPopulated !== null
+      isCallHistoryUser(peerPopulated)
         ? peerPopulated
         : { _id: peerPopulated, name: "Unknown", avatar: "" };
 
     return {
-      _id: (call as any)._id.toString(),
+      _id: call._id.toString(),
       callType: call.callType,
       status: call.status,
       direction: isOutgoing ? ("outgoing" as const) : ("incoming" as const),
@@ -747,9 +776,9 @@ export const getCallHistory = async (
       createdAt: call.createdAt,
       endedAt: call.endedAt,
       peer: {
-        _id: (peerObj as any)._id?.toString() ?? "",
-        name: (peerObj as any).name ?? "Unknown",
-        avatar: (peerObj as any).avatar ?? "",
+        _id: peerObj._id.toString(),
+        name: peerObj.name ?? "Unknown",
+        avatar: peerObj.avatar ?? "",
       },
     };
   });

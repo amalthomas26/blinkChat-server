@@ -1,5 +1,3 @@
-import { AuthenticatedSocket, TypedIO } from "./socket.types";
-import { presenceStore } from "./presence.store";
 import {
   initiateCall,
   acknowledgeRinging,
@@ -12,8 +10,16 @@ import {
   relayIceRestart,
   getCallerInfo,
 } from "../modules/call/call.service";
-import { createCallLogMessage } from "../modules/message/message.service";
 import { CallStatus } from "../modules/call/call.types";
+import { createCallLogMessage } from "../modules/message/message.service";
+import type { MessageDto } from "../modules/message/message.types";
+
+import { presenceStore } from "./presence.store";
+import {
+  AuthenticatedSocket,
+  ServerToClientEvents,
+  TypedIO,
+} from "./socket.types";
 
 const logError = (context: string, err: unknown) => {
   const message = err instanceof Error ? err.message : "Unknown error";
@@ -21,16 +27,20 @@ const logError = (context: string, err: unknown) => {
 };
 
 const emitToUser = <
-  E extends keyof import("./socket.types").ServerToClientEvents,
+  E extends keyof ServerToClientEvents,
 >(
   io: TypedIO,
   userId: string,
   event: E,
-  payload: Parameters<import("./socket.types").ServerToClientEvents[E]>[0],
+  payload: Parameters<ServerToClientEvents[E]>[0],
 ): void => {
   const socketIds = presenceStore.getSockets(userId);
   for (const socketId of socketIds) {
-    (io.to(socketId).emit as any)(event, payload);
+    const emit = io.to(socketId).emit as (
+      eventName: E,
+      payload: Parameters<ServerToClientEvents[E]>[0]
+    ) => void;
+    emit(event, payload);
   }
 };
 
@@ -76,7 +86,7 @@ export const registerCallHandlers = (
           });
           if (log) {
             for (const pid of log.participantIds) {
-              emitToUser(io, pid, "receive_message", log.message as any);
+              emitToUser(io, pid, "receive_message", log.message as MessageDto);
             }
           }
         },
@@ -181,7 +191,12 @@ export const registerCallHandlers = (
       });
       if (rejectLog) {
         for (const pid of rejectLog.participantIds) {
-          emitToUser(io, pid, "receive_message", rejectLog.message as any);
+          emitToUser(
+            io,
+            pid,
+            "receive_message",
+            rejectLog.message as MessageDto,
+          );
         }
       }
 
@@ -228,7 +243,7 @@ export const registerCallHandlers = (
       });
       if (endLog) {
         for (const pid of endLog.participantIds) {
-          emitToUser(io, pid, "receive_message", endLog.message as any);
+          emitToUser(io, pid, "receive_message", endLog.message as MessageDto);
         }
       }
 

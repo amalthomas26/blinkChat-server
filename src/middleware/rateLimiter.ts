@@ -1,5 +1,5 @@
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { Request, Response } from "express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 const rateLimitHandler = (_req: Request, res: Response) => {
   return res.status(429).json({

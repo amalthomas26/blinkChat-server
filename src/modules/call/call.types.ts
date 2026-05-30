@@ -1,4 +1,3 @@
-import type { Types } from "mongoose";
 
 export enum CallType {
   AUDIO = "audio",

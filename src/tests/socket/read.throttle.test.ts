@@ -1,10 +1,25 @@
 import mongoose from "mongoose";
-import Message from "../../modules/message/message.model";
+
 import Conversation from "../../modules/conversation/conversation.model";
 import { ConversationParticipant } from "../../modules/conversation/conversationParticipant.model";
+import Message from "../../modules/message/message.model";
 import { registerMessageHandlers } from "../../socket/message.handler";
+import type { AuthenticatedSocket, TypedIO } from "../../socket/socket.types";
 
 jest.setTimeout(30000);
+
+type RegisteredMessageSocket = Record<string, unknown> & {
+  data: { userId: string };
+  id: string;
+  rooms: Set<string>;
+  join: jest.Mock;
+  emit: jest.Mock;
+  on: (event: string, handler: (...args: unknown[]) => unknown) => void;
+  messages_read?: (
+    payload: { conversationId: string; lastSeenMessageId: string },
+    callback: jest.Mock,
+  ) => Promise<void>;
+};
 
 describe("Socket - Read Idempotency & Stability", () => {
   let userA: mongoose.Types.ObjectId;
@@ -12,8 +27,8 @@ describe("Socket - Read Idempotency & Stability", () => {
   let conversationId: mongoose.Types.ObjectId;
   let messageId: mongoose.Types.ObjectId;
 
-  let socket: any;
-  let io: any;
+  let socket: RegisteredMessageSocket;
+  let io: { to: jest.Mock };
   let emitMock: jest.Mock;
 
   beforeEach(async () => {
@@ -56,17 +71,20 @@ describe("Socket - Read Idempotency & Stability", () => {
       rooms: new Set<string>(),
       join: jest.fn((room: string) => socket.rooms.add(room)),
       emit: jest.fn(),
-      on: function (event: string, handler: any) {
+      on(event: string, handler: (...args: unknown[]) => unknown) {
         this[event] = handler;
       },
     };
 
-    registerMessageHandlers(io, socket);
+    registerMessageHandlers(
+      io as unknown as TypedIO,
+      socket as unknown as AuthenticatedSocket,
+    );
   });
 
   it("should allow only one effective read update under repeated calls", async () => {
     const calls = Array.from({ length: 5 }).map(() =>
-      socket.messages_read(
+      socket.messages_read!(
         {
           conversationId: conversationId.toString(),
           lastSeenMessageId: messageId.toString(),

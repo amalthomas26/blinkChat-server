@@ -1,10 +1,8 @@
 import { createServer } from "http";
+
 import { Server } from "socket.io";
 import { io as Client, Socket as ClientSocket } from "socket.io-client";
-import { registerCallHandlers } from "../../socket/call.handler";
-import { presenceStore } from "../../socket/presence.store";
 
-// ─── Mock the entire call service ─────────────────────────
 import {
   initiateCall,
   acknowledgeRinging,
@@ -17,6 +15,18 @@ import {
   relayIceRestart,
   getCallerInfo,
 } from "../../modules/call/call.service";
+import { CallType } from "../../modules/call/call.types";
+import { registerCallHandlers } from "../../socket/call.handler";
+import { presenceStore } from "../../socket/presence.store";
+import type {
+  ApiResponse,
+  AuthenticatedSocket,
+  ClientToServerEvents,
+  ServerToClientEvents,
+  TypedIO,
+} from "../../socket/socket.types";
+
+// ─── Mock the entire call service ─────────────────────────
 
 jest.mock("../../modules/call/call.service", () => ({
   initiateCall: jest.fn(),
@@ -33,14 +43,30 @@ jest.mock("../../modules/call/call.service", () => ({
 
 jest.setTimeout(30000);
 
+const expectSuccess = <T>(response: ApiResponse<T>): T => {
+  expect(response.success).toBe(true);
+  if (!response.success) {
+    throw new Error(`Expected success response, received: ${response.error}`);
+  }
+  return response.data;
+};
+
+const expectFailure = <T>(response: ApiResponse<T>): string => {
+  expect(response.success).toBe(false);
+  if (response.success) {
+    throw new Error("Expected failure response");
+  }
+  return response.error;
+};
+
 // ─── Test constants ───────────────────────────────────────
 const callerId = "507f1f77bcf86cd799439011";
 const receiverId = "507f1f77bcf86cd799439022";
 const callId = "507f1f77bcf86cd799439033";
 
-let ioServer: Server;
-let callerSocket: ClientSocket;
-let receiverSocket: ClientSocket;
+let ioServer: Server<ClientToServerEvents, ServerToClientEvents>;
+let callerSocket: ClientSocket<ServerToClientEvents, ClientToServerEvents>;
+let receiverSocket: ClientSocket<ServerToClientEvents, ClientToServerEvents>;
 let httpServer: ReturnType<typeof createServer>;
 
 // ─── Setup / Teardown ─────────────────────────────────────
@@ -56,11 +82,18 @@ beforeAll((done) => {
     // Register the user in presenceStore so emitToUser works
     presenceStore.add(userId, socket.id);
 
-    registerCallHandlers(ioServer as any, socket as any);
+    registerCallHandlers(
+      ioServer as unknown as TypedIO,
+      socket as unknown as AuthenticatedSocket,
+    );
   });
 
   httpServer.listen(() => {
-    const port = (httpServer.address() as any).port;
+    const address = httpServer.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to bind test HTTP server");
+    }
+    const port = address.port;
     let connected = 0;
     const onConnect = () => {
       connected++;
@@ -101,7 +134,7 @@ describe("Socket - call:initiate", () => {
       callId,
       callerId,
       receiverId,
-      callType: "audio",
+      callType: CallType.AUDIO,
       status: "initiated",
       createdAt: now,
     });
@@ -111,7 +144,7 @@ describe("Socket - call:initiate", () => {
       avatar: "https://img.test/avatar.jpg",
     });
 
-    receiverSocket.once("call:incoming", (payload: any) => {
+    receiverSocket.once("call:incoming", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.callerId).toBe(callerId);
       expect(payload.callerName).toBe("Caller Name");
@@ -122,10 +155,10 @@ describe("Socket - call:initiate", () => {
 
     callerSocket.emit(
       "call:initiate",
-      { receiverId, callType: "audio" },
-      (response: any) => {
-        expect(response.success).toBe(true);
-        expect(response.data.callId).toBe(callId);
+      { receiverId, callType: CallType.AUDIO },
+      (response) => {
+        const data = expectSuccess(response);
+        expect(data.callId).toBe(callId);
       },
     );
   });
@@ -133,10 +166,13 @@ describe("Socket - call:initiate", () => {
   it("should return error if receiverId is missing", (done) => {
     callerSocket.emit(
       "call:initiate",
-      { callType: "audio" },
-      (response: any) => {
-        expect(response.success).toBe(false);
-        expect(response.error).toContain("receiverId and callType are required");
+      {
+        callType: CallType.AUDIO,
+      } as unknown as Parameters<ClientToServerEvents["call:initiate"]>[0],
+      (response) => {
+        expect(expectFailure(response)).toContain(
+          "receiverId and callType are required",
+        );
         done();
       },
     );
@@ -147,10 +183,9 @@ describe("Socket - call:initiate", () => {
 
     callerSocket.emit(
       "call:initiate",
-      { receiverId, callType: "audio" },
-      (response: any) => {
-        expect(response.success).toBe(false);
-        expect(response.error).toBe("User is busy");
+      { receiverId, callType: CallType.AUDIO },
+      (response) => {
+        expect(expectFailure(response)).toBe("User is busy");
         done();
       },
     );
@@ -164,7 +199,7 @@ describe("Socket - call:ringing", () => {
   it("should acknowledge ringing and forward to caller", (done) => {
     (acknowledgeRinging as jest.Mock).mockResolvedValue(undefined);
 
-    callerSocket.once("call:ringing", (payload: any) => {
+    callerSocket.once("call:ringing", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(acknowledgeRinging).toHaveBeenCalledWith(callId, receiverId);
       done();
@@ -173,7 +208,7 @@ describe("Socket - call:ringing", () => {
     receiverSocket.emit(
       "call:ringing",
       { callId, callerId },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -182,10 +217,11 @@ describe("Socket - call:ringing", () => {
   it("should return error if callId is missing", (done) => {
     receiverSocket.emit(
       "call:ringing",
-      { callerId },
-      (response: any) => {
-        expect(response.success).toBe(false);
-        expect(response.error).toContain("callId and callerId are required");
+      { callerId } as unknown as Parameters<ClientToServerEvents["call:ringing"]>[0],
+      (response) => {
+        expect(expectFailure(response)).toContain(
+          "callId and callerId are required",
+        );
         done();
       },
     );
@@ -203,11 +239,11 @@ describe("Socket - call:accept", () => {
       callId,
       callerId,
       receiverId,
-      callType: "audio",
+      callType: CallType.AUDIO,
       acceptedAt,
     });
 
-    callerSocket.once("call:accepted", (payload: any) => {
+    callerSocket.once("call:accepted", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.acceptedAt).toBeTruthy();
       done();
@@ -216,9 +252,9 @@ describe("Socket - call:accept", () => {
     receiverSocket.emit(
       "call:accept",
       { callId },
-      (response: any) => {
-        expect(response.success).toBe(true);
-        expect(response.data.callId).toBe(callId);
+      (response) => {
+        const data = expectSuccess(response);
+        expect(data.callId).toBe(callId);
       },
     );
   });
@@ -243,12 +279,12 @@ describe("Socket - call:reject", () => {
 
     let rejectedReceived = false;
 
-    callerSocket.once("call:rejected", (payload: any) => {
+    callerSocket.once("call:rejected", (payload) => {
       expect(payload.callId).toBe(callId);
       rejectedReceived = true;
     });
 
-    callerSocket.once("call:ended", (payload: any) => {
+    callerSocket.once("call:ended", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.reason).toBe("rejected");
       expect(payload.duration).toBeNull();
@@ -262,7 +298,7 @@ describe("Socket - call:reject", () => {
     receiverSocket.emit(
       "call:reject",
       { callId },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -286,7 +322,7 @@ describe("Socket - call:end", () => {
       duration: 120,
     });
 
-    receiverSocket.once("call:ended", (payload: any) => {
+    receiverSocket.once("call:ended", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.reason).toBe("ended");
       expect(payload.duration).toBe(120);
@@ -296,7 +332,7 @@ describe("Socket - call:end", () => {
     callerSocket.emit(
       "call:end",
       { callId },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -313,7 +349,7 @@ describe("Socket - call:end", () => {
       duration: null,
     });
 
-    receiverSocket.once("call:ended", (payload: any) => {
+    receiverSocket.once("call:ended", (payload) => {
       expect(payload.reason).toBe("cancelled");
       done();
     });
@@ -332,7 +368,7 @@ describe("Socket - call:end", () => {
       duration: null,
     });
 
-    callerSocket.once("call:ended", (payload: any) => {
+    callerSocket.once("call:ended", (payload) => {
       expect(payload.reason).toBe("missed");
       done();
     });
@@ -351,7 +387,7 @@ describe("Socket - WebRTC Signaling", () => {
       callId,
     });
 
-    receiverSocket.once("webrtc:offer", (payload: any) => {
+    receiverSocket.once("webrtc:offer", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.sdp).toBe("offer-sdp-data");
       done();
@@ -360,7 +396,7 @@ describe("Socket - WebRTC Signaling", () => {
     callerSocket.emit(
       "webrtc:offer",
       { callId, sdp: "offer-sdp-data" },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -372,7 +408,7 @@ describe("Socket - WebRTC Signaling", () => {
       callId,
     });
 
-    callerSocket.once("webrtc:answer", (payload: any) => {
+    callerSocket.once("webrtc:answer", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.sdp).toBe("answer-sdp-data");
       done();
@@ -381,7 +417,7 @@ describe("Socket - WebRTC Signaling", () => {
     receiverSocket.emit(
       "webrtc:answer",
       { callId, sdp: "answer-sdp-data" },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -395,7 +431,7 @@ describe("Socket - WebRTC Signaling", () => {
       callId,
     });
 
-    receiverSocket.once("webrtc:ice-candidate", (payload: any) => {
+    receiverSocket.once("webrtc:ice-candidate", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.candidate).toEqual(candidate);
       done();
@@ -404,7 +440,7 @@ describe("Socket - WebRTC Signaling", () => {
     callerSocket.emit(
       "webrtc:ice-candidate",
       { callId, candidate },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -416,7 +452,7 @@ describe("Socket - WebRTC Signaling", () => {
       callId,
     });
 
-    receiverSocket.once("webrtc:restart-ice", (payload: any) => {
+    receiverSocket.once("webrtc:restart-ice", (payload) => {
       expect(payload.callId).toBe(callId);
       expect(payload.userId).toBe(callerId);
       done();
@@ -425,7 +461,7 @@ describe("Socket - WebRTC Signaling", () => {
     callerSocket.emit(
       "webrtc:restart-ice",
       { callId },
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
       },
     );
@@ -434,10 +470,9 @@ describe("Socket - WebRTC Signaling", () => {
   it("should return error for webrtc:offer with missing sdp", (done) => {
     callerSocket.emit(
       "webrtc:offer",
-      { callId },
-      (response: any) => {
-        expect(response.success).toBe(false);
-        expect(response.error).toContain("Missing payload");
+      { callId } as unknown as Parameters<ClientToServerEvents["webrtc:offer"]>[0],
+      (response) => {
+        expect(expectFailure(response)).toContain("Missing payload");
         done();
       },
     );
@@ -451,9 +486,8 @@ describe("Socket - WebRTC Signaling", () => {
     receiverSocket.emit(
       "webrtc:answer",
       { callId, sdp: "bad" },
-      (response: any) => {
-        expect(response.success).toBe(false);
-        expect(response.error).toContain("Cannot relay SDP");
+      (response) => {
+        expect(expectFailure(response)).toContain("Cannot relay SDP");
         done();
       },
     );

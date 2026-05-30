@@ -1,6 +1,7 @@
-import { AuthenticatedSocket, JoinConversationResponse } from "./socket.types";
 import { isValidObjectId } from "../utils/objectId";
+
 import { ensureJoinedConversationRoom } from "./conversation-room.guard";
+import { AuthenticatedSocket, JoinConversationResponse } from "./socket.types";
 
 type JoinCallback = (res: JoinConversationResponse) => void;
 

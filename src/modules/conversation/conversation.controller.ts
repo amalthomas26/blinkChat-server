@@ -1,4 +1,11 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
+
+import { asyncHandler } from "../../middleware/asyncHandler";
+import { presenceStore } from "../../socket/presence.store";
+import { getIO } from "../../socket/socket.server";
+import { createSystemMessage } from "../message/message.service";
+
 import {
   listConversationsForUser,
   startConversation as startConversationService,
@@ -22,12 +29,8 @@ import {
   updateGroupDescription,
   deleteDirectConversation,
 } from "./conversation.service";
-import { asyncHandler } from "../../middleware/asyncHandler";
-import { getIO } from "../../socket/socket.server";
-import { presenceStore } from "../../socket/presence.store";
-import { createSystemMessage } from "../message/message.service";
 import { ConversationParticipant } from "./conversationParticipant.model";
-import mongoose from "mongoose";
+
 
 // startConversationController: validation is already done by validateStartConversation middleware.
 // The service re-validates userId/receiverId at the boundary — no duplication needed here.

@@ -1,14 +1,15 @@
-import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import express from "express";
 import helmet from "helmet";
+
+import { corsOptions } from "./config/env";
+import { errorHandler } from "./middleware/error";
 import authRoutes from "./modules/auth/auth.routes";
+import callRoutes from "./modules/call/call.routes";
 import conversationRoutes from "./modules/conversation/conversation.routes";
 import messageRoutes from "./modules/message/message.routes";
 import uploadRoutes from "./modules/upload/upload.routes";
-import callRoutes from "./modules/call/call.routes";
-import { errorHandler } from "./middleware/error";
-import { corsOptions } from "./config/env";
 import userRoutes from "./modules/user/user.routes";
 
 const app = express();

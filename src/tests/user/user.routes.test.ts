@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import request from "supertest";
+
 import app from "../../app";
+import { runtimeConfig as config } from "../../config/env";
 import { User } from "../../modules/user/user.model";
 import { generateAccessToken } from "../../utils/token.utils";
-import * as uploadService from "../../modules/upload/upload.service";
-import { runtimeConfig as config } from "../../config/env";
 
 jest.mock("../../modules/upload/upload.service", () => ({
   deleteFile: jest.fn(),

@@ -1,4 +1,7 @@
 import { Router } from "express";
+
+import { protect } from "../../middleware/auth";
+
 import {
   sendMessage,
   getMessages,
@@ -8,7 +11,6 @@ import {
   searchMessagesController,
   forwardMessageController,
 } from ".//message.controller";
-import { protect } from "../../middleware/auth";
 
 const router = Router();
 

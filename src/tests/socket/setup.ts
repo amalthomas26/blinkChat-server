@@ -1,14 +1,26 @@
 import { createServer } from "http";
+
 import { Server } from "socket.io";
-import { io as Client } from "socket.io-client";
+import { io as Client, Socket as ClientSocket } from "socket.io-client";
+
 import { registerMessageHandlers } from "../../socket/message.handler";
 import { registerEvents } from "../../socket/socket.event";
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+} from "../../socket/socket.types";
 import { registerTypingHandlers } from "../../socket/typing.handler";
 
-export let io: Server;
-export let clientSocket: any;
-export let peerSocket: any;
-export let httpServer: any;
+export let io: Server<ClientToServerEvents, ServerToClientEvents>;
+export let clientSocket: ClientSocket<
+  ServerToClientEvents,
+  ClientToServerEvents
+>;
+export let peerSocket: ClientSocket<
+  ServerToClientEvents,
+  ClientToServerEvents
+>;
+export let httpServer: ReturnType<typeof createServer>;
 
 jest.setTimeout(30000);
 
@@ -25,7 +37,11 @@ export const setupSocketTest = (done: () => void) => {
   });
 
   httpServer.listen(() => {
-    const port = (httpServer.address() as any).port;
+    const address = httpServer.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to bind test HTTP server");
+    }
+    const port = address.port;
     let connectedClients = 0;
     const handleConnect = () => {
       connectedClients += 1;

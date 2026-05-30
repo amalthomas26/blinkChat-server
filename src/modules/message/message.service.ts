@@ -1,13 +1,20 @@
 import mongoose, { Types } from "mongoose";
-import Message, { IMessage, MessageType } from "./message.model";
-import Conversation from "../conversation/conversation.model";
-import { ConversationParticipant } from "../conversation/conversationParticipant.model";
+
+import { runtimeConfig as config } from "../../config/env";
 import { ApiError } from "../../utils/ApiError";
 import { isValidObjectId } from "../../utils/objectId";
+import Conversation, { IConversation } from "../conversation/conversation.model";
 import {
   ensureConversationMembershipForUser,
   getConversationForUser,
 } from "../conversation/conversation.service";
+import type { ConversationListMessageDto } from "../conversation/conversation.types";
+import { ConversationParticipant } from "../conversation/conversationParticipant.model";
+import { deleteFile } from "../upload/upload.service";
+import { Block } from "../user/block.model";
+import { User } from "../user/user.model";
+
+import Message, { IMessage, MessageType } from "./message.model";
 import {
   MessageDto,
   DeleteMessageResult,
@@ -18,11 +25,6 @@ import {
   SearchMessagesResult,
   ForwardMessageInput,
 } from "./message.types";
-import type { ConversationListMessageDto } from "../conversation/conversation.types";
-import { runtimeConfig as config } from "../../config/env";
-import { deleteFile } from "../upload/upload.service";
-import { Block } from "../user/block.model";
-import { User } from "../user/user.model";
 
 type MarkDeliveredInput = {
   userId: string;
@@ -269,7 +271,10 @@ const persistMessageRecord = async (
 
   validateMessage(data);
 
-  const conversation = await getConversationForUser(conversationId, senderId);
+  const conversation = (await getConversationForUser(
+    conversationId,
+    senderId,
+  )) as IConversation;
   const userObjectId = toObjectId(senderId, "sender ID");
 
   if (!conversation.isGroup) {
@@ -329,7 +334,13 @@ const persistMessageRecord = async (
       conversation: conversation._id,
     })
       .select("sender type content mediaUrl  isDeleted")
-      .lean();
+      .lean<{
+        sender: Types.ObjectId;
+        type: MessageType;
+        content?: string;
+        mediaUrl?: string;
+        isDeleted?: boolean;
+      } | null>();
 
     if (!parent)
       throw new ApiError(
@@ -474,9 +485,9 @@ export async function markMessagesDelivered(input: MarkDeliveredInput) {
     throw new ApiError(400, "Invalid input");
   }
 
-  const userObjectId = toObjectId(userId, "user ID");
   const conversationObjectId = toObjectId(conversationId, "conversation ID");
   const messageObjectIds = messageIds.map((id) => new Types.ObjectId(id));
+  const userObjectId = toObjectId(userId, "user ID");
 
   const isParticipant = await ConversationParticipant.exists({
     userId: userObjectId,
@@ -523,7 +534,6 @@ export const syncMessages = async (
     throw new ApiError(400, "Invalid input");
   }
 
-  const userObjectId = toObjectId(userId, "user ID");
   const conversationObjectId = toObjectId(conversationId, "conversation ID");
 
   await ensureConversationMembershipForUser(conversationObjectId, userId);
@@ -841,7 +851,20 @@ export const forwardMessage = async (
     .select(
       "conversation sender content type mediaUrl mediaPublicId thumbnailUrl fileName fileSize audioDuration isDeleted",
     )
-    .lean();
+    .lean<{
+      _id: Types.ObjectId;
+      conversation: Types.ObjectId;
+      sender: Types.ObjectId;
+      content?: string;
+      type: MessageType;
+      mediaUrl?: string;
+      mediaPublicId?: string | null;
+      thumbnailUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+      audioDuration?: number;
+      isDeleted?: boolean;
+    } | null>();
 
   if (!originalMessage) throw new ApiError(404, "Original message not found");
 
@@ -853,10 +876,10 @@ export const forwardMessage = async (
     userId,
   );
 
-  const targetConversation = await getConversationForUser(
+  const targetConversation = (await getConversationForUser(
     input.targetConversationId,
     userId,
-  );
+  )) as IConversation;
 
   if (!targetConversation.isGroup) {
     const recipientId = targetConversation.participants.find(
@@ -878,7 +901,7 @@ export const forwardMessage = async (
   }
   const originalSender = await User.findById(originalMessage.sender)
     .select("name")
-    .lean();
+    .lean<{ name?: string } | null>();
 
   const originalSenderName = originalSender?.name ?? "Deleted User";
 

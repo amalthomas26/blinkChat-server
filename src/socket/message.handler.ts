@@ -1,5 +1,5 @@
-import { AuthenticatedSocket, TypedIO } from "./socket.types";
-import { isValidObjectId } from "../utils/objectId";
+import Conversation from "../modules/conversation/conversation.model";
+import { MessageType } from "../modules/message/message.model";
 import {
   sendMessage as sendMessageService,
   markMessagesDelivered,
@@ -7,12 +7,15 @@ import {
   syncMessages,
   deleteMessage,
 } from "../modules/message/message.service";
-import { SendMessagePayload, MessagePayload } from "./socket.types";
-import { MessageType } from "../modules/message/message.model";
-import { emitMessage } from "./socket.emitter";
-import { Socket } from "socket.io";
 import { ApiError } from "../utils/ApiError";
-import Conversation from "../modules/conversation/conversation.model";
+import { isValidObjectId } from "../utils/objectId";
+
+import { emitMessage } from "./socket.emitter";
+import { AuthenticatedSocket, TypedIO } from "./socket.types";
+import { SendMessagePayload, MessagePayload } from "./socket.types";
+
+
+
 
 type DeliveryPayload = {
   conversationId: string;
@@ -35,7 +38,7 @@ type ApiResponse<T = unknown> =
       success: true;
       data: T;
       clientTempId?: string;
-      meta?: Record<string, any>;
+      meta?: Record<string, unknown>;
     }
   | { success: false; error: string; clientTempId?: string };
 

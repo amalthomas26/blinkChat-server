@@ -1,5 +1,6 @@
-import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
+
+import jwt, { SignOptions } from "jsonwebtoken";
 
 export interface TokenPayload {
   userId: string;

@@ -1,7 +1,9 @@
-import { AuthenticatedSocket } from "./socket.types";
 import jwt from "jsonwebtoken";
+
 import { ApiError } from "../utils/ApiError";
 import { getJwtSecret } from "../utils/token.utils";
+
+import { AuthenticatedSocket } from "./socket.types";
 
 type SocketNext = (err?: Error) => void;
 
@@ -35,7 +37,7 @@ export const verifySocketToken = (
     socket.data.userId = (decoded as { userId: string }).userId;
 
     next();
-  } catch (err) {
+  } catch {
     next(new ApiError(400, "AUTH_INVALID_TOKEN"));
   }
 };

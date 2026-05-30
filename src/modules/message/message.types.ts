@@ -1,5 +1,6 @@
-import  { MessageType } from "./message.model";
 import type { ConversationListMessageDto } from "../conversation/conversation.types";
+
+import  { MessageType } from "./message.model";
 
 export interface SendMessageInput {
   conversationId: string;

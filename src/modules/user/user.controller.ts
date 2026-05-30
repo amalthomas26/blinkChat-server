@@ -1,5 +1,14 @@
 import { Request, Response } from "express";
+
+import {
+  clearRefreshTokenCookieOptions,
+  refreshCookieName,
+} from "../../config/env";
 import { asyncHandler } from "../../middleware/asyncHandler";
+import { presenceStore } from "../../socket/presence.store";
+import { getIO } from "../../socket/socket.server";
+import { ApiError } from "../../utils/ApiError";
+
 import {
   getMe as getMeService,
   getUserById as getUserByIdService,
@@ -13,13 +22,7 @@ import {
   deleteAccount,
   toggle2FA,
 } from "./user.service";
-import { ApiError } from "../../utils/ApiError";
-import { getIO } from "../../socket/socket.server";
-import { presenceStore } from "../../socket/presence.store";
-import {
-  clearRefreshTokenCookieOptions,
-  refreshCookieName,
-} from "../../config/env";
+
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const dto = await getMeService(req.user.id);

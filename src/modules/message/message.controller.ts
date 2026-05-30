@@ -1,4 +1,11 @@
 import { Request, Response } from "express";
+
+import { asyncHandler } from "../../middleware/asyncHandler";
+import { emitMessage } from "../../socket/socket.emitter";
+import { getIO } from "../../socket/socket.server";
+import { ApiError } from "../../utils/ApiError";
+import { successResponse } from "../../utils/apiResponse";
+
 import {
   sendMessage as sendMessageService,
   fetchMessages,
@@ -8,11 +15,6 @@ import {
   searchMessages,
   forwardMessage,
 } from "./message.service";
-import { asyncHandler } from "../../middleware/asyncHandler";
-import { ApiError } from "../../utils/ApiError";
-import { getIO } from "../../socket/socket.server";
-import { emitMessage } from "../../socket/socket.emitter";
-import { successResponse } from "../../utils/apiResponse";
 
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   const result = await sendMessageService(req.user.id, req.body);
@@ -29,8 +31,6 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getMessages = asyncHandler(async (req: Request, res: Response) => {
-  const page = Number(req.query.page) || 1;
-
   if (!req.params.conversationId) {
     throw new ApiError(400, "Conversation ID required");
   }

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+
 import { getIceConfig, getCallHistory } from "./call.service";
 
 export const fetchIceConfig = (req: Request, res: Response, next: NextFunction) => {

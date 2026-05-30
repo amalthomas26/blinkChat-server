@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
+
 import Conversation from "../../modules/conversation/conversation.model";
-import { ConversationParticipant } from "../../modules/conversation/conversationParticipant.model";
-import Message, { MessageType } from "../../modules/message/message.model";
 import {
   getConversationForUser,
   listConversationsForUser,
@@ -13,9 +12,9 @@ import {
   removeGroupMember,
   renameGroup,
   leaveGroup,
-  pinMessage,
-  unpinMessage,
 } from "../../modules/conversation/conversation.service";
+import { ConversationParticipant } from "../../modules/conversation/conversationParticipant.model";
+import Message, { MessageType } from "../../modules/message/message.model";
 import { User } from "../../modules/user/user.model";
 
 jest.setTimeout(20000);

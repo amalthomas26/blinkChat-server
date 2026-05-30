@@ -1,10 +1,13 @@
 import crypto from "crypto";
+
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import OtpToken, { OtpPurpose } from "./otpToken.model";
-import { sendOtpEmail } from "./email.services";
+
 import { ApiError } from "../../utils/ApiError";
-import { getJwtSecret, getOtpProofSecret } from "../../utils/token.utils";
+import { getOtpProofSecret } from "../../utils/token.utils";
+
+import { sendOtpEmail } from "./email.services";
+import OtpToken, { OtpPurpose } from "./otpToken.model";
 
 
 const OTP_EXPIRY_MINUTES   = Number(process.env.OTP_EXPIRY_MINUTES)   || 10;

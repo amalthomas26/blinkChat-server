@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
+
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { ApiError } from "../../utils/ApiError";
+
 import { uploadFile } from "./upload.service";
 
 export const uploadFileController = asyncHandler(

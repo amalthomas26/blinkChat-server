@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
+
 import { CallType, CallStatus } from "./call.types";
 
 export interface ICall extends Document {

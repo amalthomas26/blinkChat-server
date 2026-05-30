@@ -84,7 +84,14 @@ schema.index({ updatedAt: -1 });
 schema.index({userId:1,isPinned:-1,pinnedAt:-1});
 
 schema.set("toJSON", {
-  transform: (_doc, ret: any) => {
+  transform: (
+    _doc,
+    ret: IConversationParticipant & {
+      _id?: mongoose.Types.ObjectId;
+      __v?: unknown;
+      id?: string;
+    },
+  ) => {
     if (ret.__v !== undefined) delete ret.__v;
     if (ret._id) {
       ret.id = ret._id.toString();

@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
+
 import { asyncHandler } from "../../middleware/asyncHandler";
-import { sendOtp, verifyOtp, issueVerifiedToken } from "./otp.service";
 import { ApiError } from "../../utils/ApiError";
+
+import { sendOtp, verifyOtp, issueVerifiedToken } from "./otp.service";
 import { OTP_PURPOSES, OtpPurpose } from "./otpToken.model";
 
 

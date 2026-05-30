@@ -1,6 +1,8 @@
 import { Router } from "express";
-import { fetchIceConfig, fetchCallHistory } from "./call.controller";
+
 import { protect } from "../../middleware/auth";
+
+import { fetchIceConfig, fetchCallHistory } from "./call.controller";
 
 const router = Router();
 

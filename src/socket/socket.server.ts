@@ -1,22 +1,21 @@
 import { Server as HTTPServer } from "http";
+
 import { Server } from "socket.io";
 
-import { TypedIO, AuthenticatedSocket } from "./socket.types";
-import { presenceStore } from "./presence.store";
-
-import { verifySocketToken } from "./socket.auth";
-import { registerMessageHandlers } from "./message.handler";
-import { registerEvents } from "./socket.event";
-import { registerTypingHandlers } from "./typing.handler";
-import { updateLastSeen, setUserOnline } from "../modules/user/user.service";
-import { User } from "../modules/user/user.model";
-import { Block } from "../modules/user/block.model";
-
-import { ApiError } from "../utils/ApiError";
 import { socketCorsOptions } from "../config/env";
-import {registerCallHandlers} from "./call.handler";
-import {handleUserDisconnect} from "../modules/call/call.service";
+import { handleUserDisconnect } from "../modules/call/call.service";
+import { Block } from "../modules/user/block.model";
+import { User } from "../modules/user/user.model";
+import { updateLastSeen, setUserOnline } from "../modules/user/user.service";
+import { ApiError } from "../utils/ApiError";
 
+import { registerCallHandlers } from "./call.handler";
+import { registerMessageHandlers } from "./message.handler";
+import { presenceStore } from "./presence.store";
+import { verifySocketToken } from "./socket.auth";
+import { registerEvents } from "./socket.event";
+import { TypedIO, AuthenticatedSocket } from "./socket.types";
+import { registerTypingHandlers } from "./typing.handler";
 let io: TypedIO;
 
 export const initSocket = (server: HTTPServer) => {

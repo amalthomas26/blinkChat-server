@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import Message, { MessageType } from "../../../modules/message/message.model";
+
 import Conversation from "../../../modules/conversation/conversation.model";
 import { ConversationParticipant } from "../../../modules/conversation/conversationParticipant.model";
-
+import Message, { MessageType } from "../../../modules/message/message.model";
 import {
   sendMessage,
   markMessagesDelivered,

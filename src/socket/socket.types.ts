@@ -1,13 +1,6 @@
+import { DefaultEventsMap } from "@socket.io/component-emitter";
 import { Socket, Server } from "socket.io";
-import type {
-  MessageDto,
-  SendMessageInput,
-} from "../modules/message/message.types";
-import type {
-  ConversationListItemDto,
-  ConversationListMessageDto,
-  ConversationListUserDto,
-} from "../modules/conversation/conversation.types";
+
 import type {
   CallType,
   CallIncomingPayload,
@@ -21,6 +14,15 @@ import type {
   WebRTCIceCandidatePayload,
   WebRTCRestartIcePayload,
 } from "../modules/call/call.types";
+import type {
+  ConversationListItemDto,
+  ConversationListMessageDto,
+  ConversationListUserDto,
+} from "../modules/conversation/conversation.types";
+import type {
+  MessageDto,
+  SendMessageInput,
+} from "../modules/message/message.types";
 
 
 
@@ -247,14 +249,14 @@ export interface SocketData {
 export type AuthenticatedSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
-  {},
+  DefaultEventsMap,
   SocketData
 >;
 
 export type TypedIO = Server<
   ClientToServerEvents,
   ServerToClientEvents,
-  {},
+  DefaultEventsMap,
   SocketData
 >;
 

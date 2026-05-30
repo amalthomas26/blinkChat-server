@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
-import { runtimeConfig as config } from "../../config/env";
 import type { UploadApiResponse } from "cloudinary";
+
+import { runtimeConfig as config } from "../../config/env";
 
 cloudinary.config({
   cloud_name: config.cloudinary.cloudName,

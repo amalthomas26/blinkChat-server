@@ -1,6 +1,15 @@
-import mongoose, { Types } from "mongoose";
-import { User } from "./user.model";
+import mongoose from "mongoose";
+
+import { runtimeConfig as config } from "../../config/env";
+import { ApiError } from "../../utils/ApiError";
 import { isValidObjectId } from "../../utils/objectId";
+import Conversation from "../conversation/conversation.model";
+import { ConversationParticipant } from "../conversation/conversationParticipant.model";
+import Message from "../message/message.model";
+import { deleteFile } from "../upload/upload.service";
+
+import { Block } from "./block.model";
+import { User } from "./user.model";
 import type {
   UserProfileDto,
   PublicUserProfileDto,
@@ -8,13 +17,9 @@ import type {
   UserProfileSource,
   UpdateProfileInput,
 } from "./user.types";
-import { ApiError } from "../../utils/ApiError";
-import { deleteFile } from "../upload/upload.service";
-import { runtimeConfig as config } from "../../config/env";
-import { Block } from "./block.model";
-import Message from "../message/message.model";
-import { ConversationParticipant } from "../conversation/conversationParticipant.model";
-import Conversation from "../conversation/conversation.model";
+
+
+
 
 const escapeRegex = (text: string): string => {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
@@ -48,6 +53,7 @@ export const setUserOnline = async (userId: string): Promise<void> => {
     if (!isValidObjectId(userId)) {
       console.error("[setUserOnline] Invalid userId", userId);
       return;
+      
     }
     await User.updateOne({ _id: userId }, { $set: { status: "online" } });
   } catch (err: unknown) {
@@ -78,7 +84,7 @@ export const getPresenceStatus = async (
 
   // Build set of user IDs that have a block relationship with the requester.
   // Both directions: requester blocked them OR they blocked the requester.
-  let blockedSet = new Set<string>();
+  const blockedSet = new Set<string>();
   if (requestingUserId && isValidObjectId(requestingUserId)) {
     const blockRecords = await Block.find({
       $or: [
@@ -413,12 +419,7 @@ export const blockUser = async (
   try {
     await Block.create({ blocker: blockerId, blocked: blockedId });
   } catch (err: unknown) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "code" in err &&
-      (err as any).code === 11000
-    ) {
+    if (err instanceof mongoose.mongo.MongoServerError && err.code === 11000) {
       throw new ApiError(409, "User is already blocked");
     }
 

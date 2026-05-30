@@ -1,4 +1,7 @@
 import { Router } from "express";
+
+import { protect } from "../../middleware/auth";
+
 import {
   listConversationsController,
   startConversationController,
@@ -23,7 +26,6 @@ import {
   deleteDirectConversationController,
 } from "./conversation.controller";
 import { validateStartConversation } from "./conversation.validation";
-import { protect } from "../../middleware/auth";
 
 const router = Router();
 
@@ -32,7 +34,7 @@ router.use(protect);
 router.post("/:id/pin", pinConversationController);
 router.delete("/:id/pin", unpinConversationController);
 router.patch("/:id/mute", muteConversationController);
-+router.delete("/:id/mute", unmuteConversationController);
+router.delete("/:id/mute", unmuteConversationController);
 
 router.post("/:id/pins/:messageId", pinMessageController);
 router.delete("/:id/pins/:messageId", unpinMessageController);

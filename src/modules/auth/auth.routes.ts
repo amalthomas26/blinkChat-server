@@ -1,4 +1,16 @@
 import { Router } from "express";
+
+import { protect } from "../../middleware/auth";
+import {
+  loginLimiter,
+  registerLimiter,
+  refreshLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+  twoFALimiter,
+} from "../../middleware/rateLimiter";
+import otpRoutes from "../otp/otp.routes";
+
 import {
   register,
   login,
@@ -14,17 +26,6 @@ import {
   revokeSessionController,
   revokeAllSessionsController,
 } from "./auth.controller";
-import { protect } from "../../middleware/auth";
-import {
-  loginLimiter,
-  registerLimiter,
-  refreshLimiter,
-  forgotPasswordLimiter,
-  resetPasswordLimiter,
-  twoFALimiter,
-} from "../../middleware/rateLimiter";
-
-import otpRoutes from "../otp/otp.routes";
 
 const router = Router();
 

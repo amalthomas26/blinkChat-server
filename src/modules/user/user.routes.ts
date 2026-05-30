@@ -1,5 +1,8 @@
 import { Router } from "express";
+
 import { protect } from "../../middleware/auth";
+import { searchLimiter } from "../../middleware/rateLimiter";
+
 import {
     getMe,
     getUserById,
@@ -15,7 +18,6 @@ import {
     updateNotificationPrefsController,
     updatePrivacyPrefsController,
 } from "./user.controller";
-import { searchLimiter } from "../../middleware/rateLimiter";
 
 const router = Router();
 

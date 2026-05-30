@@ -1,8 +1,10 @@
 // server/src/modules/otp/otp.routes.ts
 
 import { Router } from "express";
-import { sendOtpController, verifyOtpController } from "./otp.controller";
+
 import { otpSendLimiter, otpVerifyLimiter } from "../../middleware/rateLimiter";
+
+import { sendOtpController, verifyOtpController } from "./otp.controller";
 
 const router = Router();
 

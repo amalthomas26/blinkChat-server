@@ -1,13 +1,17 @@
 import mongoose, { ClientSession, Types } from "mongoose";
-import Conversation, { IConversation } from "./conversation.model";
-import { ConversationParticipant } from "./conversationParticipant.model";
+
+import { runtimeConfig as config } from "../../config/env";
 import { ApiError } from "../../utils/ApiError";
+import { isValidObjectId } from "../../utils/objectId";
 import { MessageType } from "../message/message.model";
 import Message from "../message/message.model";
-import { MessageDto } from "../message/message.types";
 import { toMessageDto } from "../message/message.service";
+import { MessageDto } from "../message/message.types";
+import { deleteFile } from "../upload/upload.service";
+import { Block } from "../user/block.model";
 import { User } from "../user/user.model";
-import { isValidObjectId } from "../../utils/objectId";
+
+import Conversation, { IConversation } from "./conversation.model";
 import {
   ConversationListItemDto,
   ConversationListMessageDto,
@@ -15,9 +19,7 @@ import {
   CreateGroupInput,
   PaginatedConversationListDto,
 } from "./conversation.types";
-import { runtimeConfig as config } from "../../config/env";
-import { deleteFile } from "../upload/upload.service";
-import { Block } from "../user/block.model";
+import { ConversationParticipant } from "./conversationParticipant.model";
 
 type PopulatedConversationUser = {
   _id: Types.ObjectId;
@@ -49,11 +51,6 @@ type PopulatedConversationRecord = {
   maxParticipants?: number;
   lastMessage?: PopulatedConversationMessage | null;
   updatedAt: Date;
-};
-
-type ConversationMembershipRecord = {
-  conversationId: PopulatedConversationRecord | null;
-  lastSeenMessageId?: Types.ObjectId | null;
 };
 
 type AggregatedParticipantRow = {
@@ -88,7 +85,7 @@ type ParticipantMembershipRecord = {
 };
 
 const withOptionalSession = <T>(
-  query: mongoose.Query<T, any>,
+  query: mongoose.Query<T, unknown>,
   session?: ClientSession,
 ) => (session ? query.session(session) : query);
 
@@ -537,8 +534,9 @@ export const listConversationsForUser = async (
         "utf8",
       ).toString("base64")
     : null;
-  const conversationIds = pageRows.map((row) => row.conversationId);
-  const groupConversationIds = pageRows.filter(r => r.conversation.isGroup).map(r => r.conversationId);
+  const groupConversationIds = pageRows
+    .filter((row) => row.conversation.isGroup)
+    .map((row) => row.conversationId);
 
   const participantMemberships = await ConversationParticipant.find({
     conversationId: { $in: groupConversationIds },
@@ -574,12 +572,16 @@ export const listConversationsForUser = async (
     }
   });
 
-  const directUsers = await User.find({ _id: { $in: Array.from(directParticipantIds) } })
+  const directUsers = await User.find({
+    _id: { $in: Array.from(directParticipantIds) },
+  })
     .select("_id name avatar status lastSeen")
     .lean<PopulatedConversationUser[]>();
 
   const directUsersMap = new Map<string, ConversationListUserDto>();
-  directUsers.forEach(u => directUsersMap.set(u._id.toString(), toConversationUserDto(u)));
+  directUsers.forEach((user) =>
+    directUsersMap.set(user._id.toString(), toConversationUserDto(user)),
+  );
 
   // Collect all direct-chat peer IDs so we can batch-check blocks once
   const directPeerIds = new Set<string>();
@@ -600,7 +602,9 @@ export const listConversationsForUser = async (
         { blocker: userId, blocked: { $in: Array.from(directPeerIds) } },
         { blocker: { $in: Array.from(directPeerIds) }, blocked: userId },
       ],
-    }).select("blocker blocked").lean<{ blocker: { toString(): string }; blocked: { toString(): string } }[]>();
+    })
+      .select("blocker blocked")
+      .lean<{ blocker: { toString(): string }; blocked: { toString(): string } }[]>();
 
     blocks.forEach((b) => {
       // Add whichever side is the peer (not userId)
@@ -614,23 +618,22 @@ export const listConversationsForUser = async (
   const conversations = pageRows.map((row) => {
     const conversation = row.conversation;
 
-    let participants: ConversationListUserDto[] = [];
-    
-    if (conversation.isGroup) {
-      participants =
-        participantsByConversation
+    const participants = conversation.isGroup
+      ? participantsByConversation
           .get(conversation._id.toString())
           ?.sort(
             (left, right) =>
               left.name.localeCompare(right.name) ||
               left.id.localeCompare(right.id),
-          ) ?? [];
-    } else {
-      participants = (conversation.participants || [])
-         .map(pid => directUsersMap.get(pid.toString()))
-         .filter((u): u is ConversationListUserDto => u !== undefined)
-         .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
-    }
+          ) ?? []
+      : (conversation.participants || [])
+          .map((pid) => directUsersMap.get(pid.toString()))
+          .filter((user): user is ConversationListUserDto => user !== undefined)
+          .sort(
+            (left, right) =>
+              left.name.localeCompare(right.name) ||
+              left.id.localeCompare(right.id),
+          );
 
     let peer = conversation.isGroup
       ? null
@@ -711,7 +714,7 @@ export const getConversationDetails = async (
 
   if (!conversation) throw new ApiError(404, "Conversation not found");
 
-  let participants: ConversationListUserDto[] = [];
+  let participants: ConversationListUserDto[];
 
   if (conversation.isGroup) {
     const participantRows = await ConversationParticipant.find({
@@ -1483,7 +1486,7 @@ export const getPinnedMessages = async (
       path: "pinnedMessages",
       match: { isDeleted: false },
     })
-    .lean<{ pinnedMessages: any[] }>();
+    .lean<{ pinnedMessages: Parameters<typeof toMessageDto>[0][] }>();
 
   if (!conversation) throw new ApiError(404, "Conversation not found");
 

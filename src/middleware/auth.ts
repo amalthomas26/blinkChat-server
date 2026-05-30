@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "./asyncHandler";
+
 import { ApiError } from "../utils/ApiError";
 import { getJwtSecret } from "../utils/token.utils";
+
+import { asyncHandler } from "./asyncHandler";
 
 interface JwtPayload {
   userId: string;

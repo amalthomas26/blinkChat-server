@@ -2,7 +2,6 @@
  * Call Service — Pure Unit Tests (fully mocked, no MongoDB)
  */
 import mongoose from "mongoose";
-import { CallStatus, CallType } from "../../../modules/call/call.types";
 
 // ─── Mock presenceStore ───────────────────────────────────
 const mockPresence = {
@@ -69,6 +68,8 @@ import {
   getIceConfig,
   timeoutManager,
 } from "../../../modules/call/call.service";
+import { CallStatus, CallType } from "../../../modules/call/call.types";
+import { Block } from "../../../modules/user/block.model";
 
 // ─── helpers ──────────────────────────────────────────────
 const oid = () => new mongoose.Types.ObjectId().toString();
@@ -140,8 +141,7 @@ describe("initiateCall", () => {
   });
 
   it("should reject if block exists", async () => {
-    const { Block } = require("../../../modules/user/block.model");
-    Block.exists.mockResolvedValueOnce({ _id: "x" });
+    (Block.exists as jest.Mock).mockResolvedValueOnce({ _id: "x" });
     await expect(
       initiateCall({ callerId, receiverId, callType: CallType.AUDIO }),
     ).rejects.toThrow("Cannot call this user");

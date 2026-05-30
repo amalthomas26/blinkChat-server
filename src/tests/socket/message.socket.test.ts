@@ -1,19 +1,24 @@
-import {
-  setupSocketTest,
-  teardownSocketTest,
-  clientSocket,
-  peerSocket,
-} from "./setup";
 
+import Conversation from "../../modules/conversation/conversation.model";
+import { getConversationForUser } from "../../modules/conversation/conversation.service";
 import {
   sendMessage,
   markConversationAsRead,
   markMessagesDelivered,
   syncMessages,
 } from "../../modules/message/message.service";
-import { getConversationForUser } from "../../modules/conversation/conversation.service";
-import Conversation from "../../modules/conversation/conversation.model";
+import type {
+  ApiResponse,
+  ConversationAccessErrorPayload,
+} from "../../socket/socket.types";
 import { ApiError } from "../../utils/ApiError";
+
+import {
+  setupSocketTest,
+  teardownSocketTest,
+  clientSocket,
+  peerSocket,
+} from "./setup";
 
 jest.mock("../../modules/message/message.service", () => ({
   sendMessage: jest.fn(),
@@ -38,13 +43,21 @@ jest.mock("../../modules/conversation/conversation.model", () => {
   };
 });
 
+const expectSuccess = <T>(response: ApiResponse<T>): T => {
+  expect(response.success).toBe(true);
+  if (!response.success) {
+    throw new Error(`Expected success response, received: ${response.error}`);
+  }
+  return response.data;
+};
+
 const conversationId = "507f1f77bcf86cd799439099";
 const messageId = "507f1f77bcf86cd799439012";
 const secondMessageId = "507f1f77bcf86cd799439013";
 const userId = "507f1f77bcf86cd799439011";
 
-const joinConversation = (socket: any, done: () => void) => {
-  socket.emit("join_conversation", conversationId, (response: any) => {
+const joinConversation = (socket: typeof clientSocket, done: () => void) => {
+  socket.emit("join_conversation", conversationId, (response) => {
     expect(response.success).toBe(true);
     done();
   });
@@ -77,7 +90,7 @@ describe("Socket Message Handlers", () => {
     clientSocket.emit(
       "join_conversation",
       conversationId,
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(true);
         expect(getConversationForUser).toHaveBeenCalledWith(
           conversationId,
@@ -89,20 +102,20 @@ describe("Socket Message Handlers", () => {
   });
 
   test("should reject unauthorized room join with explicit error event", (done) => {
-    let accessErrorPayload: any;
+    let accessErrorPayload: ConversationAccessErrorPayload | undefined;
 
     (getConversationForUser as jest.Mock).mockRejectedValueOnce(
       new ApiError(403, "User is not a participant in this conversation"),
     );
 
-    clientSocket.once("conversation_access_error", (payload: any) => {
+    clientSocket.once("conversation_access_error", (payload) => {
       accessErrorPayload = payload;
     });
 
     clientSocket.emit(
       "join_conversation",
       conversationId,
-      (response: any) => {
+      (response) => {
         expect(response.success).toBe(false);
         expect(response.error).toBe(
           "User is not a participant in this conversation",
@@ -143,7 +156,7 @@ describe("Socket Message Handlers", () => {
     });
 
     joinConversation(clientSocket, () => {
-      clientSocket.once("receive_message", (msg: any) => {
+      clientSocket.once("receive_message", (msg) => {
         expect(msg).toEqual(messageDto);
         done();
       });
@@ -155,9 +168,8 @@ describe("Socket Message Handlers", () => {
           content: "Hello",
           clientTempId: "temp123",
         },
-        (response: any) => {
-          expect(response.success).toBe(true);
-          expect(response.data).toEqual(messageDto);
+        (response) => {
+          expect(expectSuccess(response)).toEqual(messageDto);
         },
       );
     });
@@ -174,9 +186,8 @@ describe("Socket Message Handlers", () => {
         conversationId,
         lastSeenMessageId: messageId,
       },
-      (response: any) => {
-        expect(response.success).toBe(true);
-        expect(response.data.updatedCount).toBe(1);
+      (response) => {
+        expect(expectSuccess(response).updatedCount).toBe(1);
         done();
       },
     );
@@ -194,7 +205,7 @@ describe("Socket Message Handlers", () => {
     });
 
     joinConversation(clientSocket, () => {
-      clientSocket.once("messages_read_update", (data: any) => {
+      clientSocket.once("messages_read_update", (data) => {
         expect(data.readerId).toBe(userId);
         expect(data.lastSeenMessageId).toBe(messageId);
         done();
@@ -219,9 +230,8 @@ describe("Socket Message Handlers", () => {
         conversationId,
         messageIds: [messageId, secondMessageId],
       },
-      (response: any) => {
-        expect(response.success).toBe(true);
-        expect(response.data).toEqual({
+      (response) => {
+        expect(expectSuccess(response)).toEqual({
           updatedCount: 2,
           messageIds: [messageId, secondMessageId],
         });
@@ -242,7 +252,7 @@ describe("Socket Message Handlers", () => {
     });
 
     joinConversation(clientSocket, () => {
-      clientSocket.once("messages_delivered_update", (data: any) => {
+      clientSocket.once("messages_delivered_update", (data) => {
         expect(data.conversationId).toBe(conversationId);
         expect(data.messageIds).toEqual([messageId, secondMessageId]);
         done();
@@ -280,9 +290,8 @@ describe("Socket Message Handlers", () => {
         conversationId,
         limit: 20,
       },
-      (response: any) => {
-        expect(response.success).toBe(true);
-        expect(response.data).toEqual(syncedMessages);
+      (response) => {
+        expect(expectSuccess(response)).toEqual(syncedMessages);
         done();
       },
     );
@@ -291,7 +300,7 @@ describe("Socket Message Handlers", () => {
   test("should broadcast typing events through the active socket flow", (done) => {
     joinConversation(clientSocket, () => {
       joinConversation(peerSocket, () => {
-        clientSocket.once("user_typing", (data: any) => {
+        clientSocket.once("user_typing", (data) => {
           expect(data).toEqual({
             conversationId,
             userId,
@@ -334,9 +343,8 @@ describe("Socket Message Handlers", () => {
           content: "Hello",
           clientTempId: "temp123",
         },
-        (response: any) => {
-          expect(response.success).toBe(true);
-          expect(response.data).toEqual(messageDto);
+        (response) => {
+          expect(expectSuccess(response)).toEqual(messageDto);
 
           setTimeout(() => {
             expect(receiveMessageSpy).not.toHaveBeenCalled();
