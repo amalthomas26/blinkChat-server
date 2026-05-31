@@ -41,19 +41,23 @@ export const initSocket = (server: HTTPServer) => {
         socketId: socket.id,
       });
 
-      setUserOnline(userId).catch(err =>
-        console.error("Failed to set user online in DB",err)
-      )
+      setUserOnline(userId).catch((err) =>
+        console.error("Failed to set user online in DB", err),
+      );
 
       // Only broadcast online status if the user hasn't disabled showOnlineStatus
-      User.findById(userId).select("privacyPrefs").lean().then((user) => {
-        if (user?.privacyPrefs?.showOnlineStatus !== false) {
+      User.findById(userId)
+        .select("privacyPrefs")
+        .lean()
+        .then((user) => {
+          if (user?.privacyPrefs?.showOnlineStatus !== false) {
+            socket.broadcast.emit("user_online", { userId });
+          }
+        })
+        .catch(() => {
+          // If lookup fails, broadcast anyway (fail-safe)
           socket.broadcast.emit("user_online", { userId });
-        }
-      }).catch(() => {
-        // If lookup fails, broadcast anyway (fail-safe)
-        socket.broadcast.emit("user_online", { userId });
-      });
+        });
       registerEvents(socket);
       registerMessageHandlers(io, socket);
       registerTypingHandlers(socket);
@@ -63,7 +67,8 @@ export const initSocket = (server: HTTPServer) => {
       // accurate online state instead of relying on missed events.
       socket.on("get_presence", async (userIds: unknown, callback: unknown) => {
         if (typeof callback !== "function") return;
-        if (!Array.isArray(userIds)) return (callback as (v: string[]) => void)([]);
+        if (!Array.isArray(userIds))
+          return (callback as (v: string[]) => void)([]);
 
         // First filter to only actually-online users
         const onlineIds = (userIds as string[]).filter(
@@ -81,14 +86,23 @@ export const initSocket = (server: HTTPServer) => {
             User.find({
               _id: { $in: onlineIds },
               "privacyPrefs.showOnlineStatus": { $ne: false },
-            }).select("_id").lean<{ _id: { toString(): string } }[]>(),
+            })
+              .select("_id")
+              .lean<{ _id: { toString(): string } }[]>(),
 
             Block.find({
               $or: [
                 { blocker: userId, blocked: { $in: onlineIds } },
                 { blocker: { $in: onlineIds }, blocked: userId },
               ],
-            }).select("blocker blocked").lean<{ blocker: { toString(): string }; blocked: { toString(): string } }[]>(),
+            })
+              .select("blocker blocked")
+              .lean<
+                {
+                  blocker: { toString(): string };
+                  blocked: { toString(): string };
+                }[]
+              >(),
           ]);
 
           // Build set of IDs that have a block with the requester
@@ -111,7 +125,6 @@ export const initSocket = (server: HTTPServer) => {
         }
       });
 
-
       socket.on("disconnect", async () => {
         try {
           const removedUserId = presenceStore.removeBySocket(socket.id);
@@ -125,17 +138,21 @@ export const initSocket = (server: HTTPServer) => {
           if (!presenceStore.isOnline(removedUserId)) {
             // Only broadcast offline if the user has showOnlineStatus enabled
             // (if they never appeared online to peers, no need to announce offline)
-            User.findById(removedUserId).select("privacyPrefs").lean().then((user) => {
-              if (user?.privacyPrefs?.showOnlineStatus !== false) {
+            User.findById(removedUserId)
+              .select("privacyPrefs")
+              .lean()
+              .then((user) => {
+                if (user?.privacyPrefs?.showOnlineStatus !== false) {
+                  socket.broadcast.emit("user_offline", {
+                    userId: removedUserId,
+                  });
+                }
+              })
+              .catch(() => {
                 socket.broadcast.emit("user_offline", {
                   userId: removedUserId,
                 });
-              }
-            }).catch(() => {
-              socket.broadcast.emit("user_offline", {
-                userId: removedUserId,
               });
-            });
 
             await updateLastSeen(removedUserId);
 
@@ -169,7 +186,10 @@ export const initSocket = (server: HTTPServer) => {
                 for (const sid of sids) {
                   io.to(sid).emit("call:ended", {
                     callId: callResult.callId,
-                    reason: callResult.status === "cancelled" ? "cancelled" : "missed",
+                    reason:
+                      callResult.status === "cancelled"
+                        ? "cancelled"
+                        : "missed",
                     duration: null,
                     endedAt: new Date(),
                   });

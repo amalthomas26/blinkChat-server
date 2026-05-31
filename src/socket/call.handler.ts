@@ -26,9 +26,7 @@ const logError = (context: string, err: unknown) => {
   console.error(`[${context}]`, message, err);
 };
 
-const emitToUser = <
-  E extends keyof ServerToClientEvents,
->(
+const emitToUser = <E extends keyof ServerToClientEvents>(
   io: TypedIO,
   userId: string,
   event: E,
@@ -36,11 +34,13 @@ const emitToUser = <
 ): void => {
   const socketIds = presenceStore.getSockets(userId);
   for (const socketId of socketIds) {
-    const emit = io.to(socketId).emit as (
-      eventName: E,
-      payload: Parameters<ServerToClientEvents[E]>[0]
-    ) => void;
-    emit(event, payload);
+    const operator = io.to(socketId) as unknown as {
+      emit: (
+        eventName: E,
+        payload: Parameters<ServerToClientEvents[E]>[0]
+      ) => void;
+    };
+    operator.emit(event, payload);
   }
 };
 
@@ -62,7 +62,14 @@ export const registerCallHandlers = (
         });
       }
 
-      console.log("[call:initiate] from:", userId, "to:", receiverId, "type:", callType);
+      console.log(
+        "[call:initiate] from:",
+        userId,
+        "to:",
+        receiverId,
+        "type:",
+        callType,
+      );
 
       const result = await initiateCall(
         { callerId: userId, receiverId, callType },
@@ -93,7 +100,10 @@ export const registerCallHandlers = (
       );
       const callerInfo = await getCallerInfo(userId);
 
-      console.log("[call:initiate] success, emitting call:incoming to:", result.receiverId);
+      console.log(
+        "[call:initiate] success, emitting call:incoming to:",
+        result.receiverId,
+      );
 
       emitToUser(io, result.receiverId, "call:incoming", {
         callId: result.callId,
@@ -238,7 +248,8 @@ export const registerCallHandlers = (
         callerId: result.callerId,
         receiverId: result.receiverId,
         callType: result.callType,
-        status: reason === "cancelled" || reason === "missed" ? reason : "ended",
+        status:
+          reason === "cancelled" || reason === "missed" ? reason : "ended",
         duration: result.duration,
       });
       if (endLog) {

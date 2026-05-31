@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { presenceStore } from "../../socket/presence.store";
 import { getIO } from "../../socket/socket.server";
+// Import emitToConversation and emitMessage helpers to fix room-only broadcast issues
+import { emitToConversation, emitMessage } from "../../socket/socket.emitter";
 import { createSystemMessage } from "../message/message.service";
 
 import {
@@ -111,6 +113,7 @@ export const createGroupController = asyncHandler(
     const io = getIO();
     const allParticipantIds = conversationDto.participants.map((p) => p.id);
 
+    // This correctly fans out to sockets directly
     for (const participantId of allParticipantIds) {
       const socketIds = presenceStore.getSockets(participantId);
       for (const socketId of socketIds) {
@@ -142,15 +145,16 @@ export const addGroupMemberController = asyncHandler(async (req, res) => {
     }
   }
 
-  io.to(conversationId).emit("group_members_added", {
+  // Changed io.to(roomId) to emitToConversation helper to reach offline/background users
+  emitToConversation(io, conversationId, "group_members_added", {
     conversationId,
     members: memberDtos,
   });
 
-  // System message: "Alice, Bob were added to the group"
+  // Changed to emitMessage helper to reach offline/background users
   const names = memberDtos.map((m) => m.name).join(", ");
   const sysMsg = await createSystemMessage(conversationId, `${names} ${memberDtos.length === 1 ? "was" : "were"} added to the group`);
-  if (sysMsg) io.to(conversationId).emit("receive_message", sysMsg);
+  if (sysMsg) emitMessage(io, conversationId, sysMsg);
 
   return res.status(200).json({ success: true, data: { added: memberDtos } });
 });
@@ -169,15 +173,16 @@ export const removeGroupMemberController = asyncHandler(async (req, res) => {
     }
   }
 
-  io.to(conversationId).emit("group_members_removed", {
+  // Changed to emitToConversation helper
+  emitToConversation(io, conversationId, "group_members_removed", {
     conversationId,
     removedUserIds: memberIds,
   });
 
-  // System message visible only to remaining members (removed ones left room above)
+  // Changed to emitMessage helper
   const removedNames = memberIds.length === 1 ? "A member" : `${memberIds.length} members`;
   const sysMsg = await createSystemMessage(conversationId, `${removedNames} ${memberIds.length === 1 ? "was" : "were"} removed from the group`);
-  if (sysMsg) io.to(conversationId).emit("receive_message", sysMsg);
+  if (sysMsg) emitMessage(io, conversationId, sysMsg);
 
   return res.status(200).json({ success: true, data: null });
 });
@@ -188,7 +193,8 @@ export const renameGroupController = asyncHandler(async (req, res) => {
 
   await renameGroup(conversationId, req.user.id, name);
 
-  getIO().to(conversationId).emit("group_renamed", {
+  // Changed to emitToConversation helper
+  emitToConversation(getIO(), conversationId, "group_renamed", {
     conversationId,
     name: name.trim(),
   });
@@ -208,23 +214,26 @@ export const leaveGroupController = asyncHandler(async (req, res) => {
     io.sockets.sockets.get(socketId)?.leave(conversationId);
   }
 
-  io.to(conversationId).emit("group_member_left", {
+  // Changed to emitToConversation helper
+  emitToConversation(io, conversationId, "group_member_left", {
     conversationId,
     userId,
     ...(newAdminId ? { newAdminId } : {}),
   });
 
-  // System message visible to remaining members only (leaver left room above)
+  // Changed to emitMessage helper
   const leftSysMsg = await createSystemMessage(conversationId, "A member left the group");
-  if (leftSysMsg) io.to(conversationId).emit("receive_message", leftSysMsg);
+  if (leftSysMsg) emitMessage(io, conversationId, leftSysMsg);
 
+  // Changed to emitMessage helper
   if (newAdminId) {
     const adminSysMsg = await createSystemMessage(conversationId, "A new admin has been assigned");
-    if (adminSysMsg) io.to(conversationId).emit("receive_message", adminSysMsg);
+    if (adminSysMsg) emitMessage(io, conversationId, adminSysMsg);
   }
 
   return res.status(200).json({ success: true, data: null });
 });
+
 export const updateGroupAvatarController = asyncHandler(
   async (req: Request, res: Response) => {
     const adminId = req.user.id;
@@ -241,7 +250,8 @@ export const updateGroupAvatarController = asyncHandler(
     );
 
     const io = getIO();
-    io.to(conversationId).emit("group_avatar_updated", {
+    // Changed to emitToConversation helper
+    emitToConversation(io, conversationId, "group_avatar_updated", {
       conversationId,
       groupAvatar: result.groupAvatar,
     });
@@ -258,7 +268,8 @@ export const deleteGroupAvatarController = asyncHandler(
     await deleteGroupAvatar(conversationId, adminId);
 
     const io = getIO();
-    io.to(conversationId).emit("group_avatar_deleted", {
+    // Changed to emitToConversation helper
+    emitToConversation(io, conversationId, "group_avatar_deleted", {
       conversationId,
     });
 
@@ -272,13 +283,15 @@ export const promoteToAdminController = asyncHandler(async (req, res) => {
 
   await promoteAdmin(conversationId, req.user.id, targetUserId);
 
-  getIO().to(conversationId).emit("member_promoted", {
+  // Changed to emitToConversation helper
+  emitToConversation(getIO(), conversationId, "member_promoted", {
     conversationId,
     promotedUserId: targetUserId,
   });
 
+  // Changed to emitMessage helper
   const promoteSysMsg = await createSystemMessage(conversationId, "A member was promoted to admin");
-  if (promoteSysMsg) getIO().to(conversationId).emit("receive_message", promoteSysMsg);
+  if (promoteSysMsg) emitMessage(getIO(), conversationId, promoteSysMsg);
 
   res.status(200).json({ success: true });
 });
@@ -288,13 +301,15 @@ export const demoteAdminController = asyncHandler(async (req, res) => {
 
   await demoteAdmin(conversationId, req.user.id, targetUserId);
 
-  getIO().to(conversationId).emit("member_demoted", {
+  // Changed to emitToConversation helper
+  emitToConversation(getIO(), conversationId, "member_demoted", {
     conversationId,
     demoteUserId: targetUserId,
   });
 
+  // Changed to emitMessage helper
   const demoteSysMsg = await createSystemMessage(conversationId, "An admin was demoted to member");
-  if (demoteSysMsg) getIO().to(conversationId).emit("receive_message", demoteSysMsg);
+  if (demoteSysMsg) emitMessage(getIO(), conversationId, demoteSysMsg);
 
   res.status(200).json({ success: true });
 });
@@ -306,7 +321,8 @@ export const pinMessageController = asyncHandler(
 
     await pinMessage(conversationId, messageId, userId);
 
-    getIO().to(conversationId).emit("message_pinned", {
+    // Changed to emitToConversation helper
+    emitToConversation(getIO(), conversationId, "message_pinned", {
       conversationId,
       messageId,
       pinnedBy: userId,
@@ -326,7 +342,8 @@ export const unpinMessageController = asyncHandler(
 
     await unpinMessage(conversationId, messageId, userId);
 
-    getIO().to(conversationId).emit("message_unpinned", {
+    // Changed to emitToConversation helper
+    emitToConversation(getIO(), conversationId, "message_unpinned", {
       conversationId,
       messageId,
     });
