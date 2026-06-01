@@ -1,6 +1,7 @@
 # BlinkChat — Backend Server
 
-> A Node.js + TypeScript backend that powers real-time chat, group conversations, media sharing, and peer-to-peer audio/video calls.
+> A Node.js + TypeScript backend that powers real-time chat using socket io, group conversations, media sharing, and peer-to-peer audio/video calls
+> using webrtc and turn server especially for reliability.
 
 ---
 
